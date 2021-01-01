@@ -31,6 +31,7 @@ import           Data.Typeable
 import           Data.Vector                                 (Vector)
 import qualified Data.Vector                                 as Vector
 
+import           GI.Gtk.Declarative.Context
 import           GI.Gtk.Declarative.EventSource.Subscription
 
 -- | The declarative form of a custom attribute. The actual type of of the
@@ -42,7 +43,7 @@ data CustomAttributeDecl widget event where
     -> decl event
     -> CustomAttributeDecl widget event
 
-deriving instance Functor (CustomAttributeDecl widget)
+--deriving instance Functor (CustomAttributeDecl widget)
 
 -- | The runtime state for a custom attribute. The actual type of
 -- the attribute is hidden here: only the widget type is exposed.
@@ -86,75 +87,77 @@ instance Hashable CustomAttributeKey where
     hashWithSalt salt k
 
 -- | Defines types that can be used as declarative custom attributes on the given widget type.
-class (Typeable decl, Typeable (AttrState decl), Functor decl) => CustomAttribute widget decl where
+class (Typeable decl, Typeable (AttrState decl)) => CustomAttribute widget decl where
 
   -- | The runtime state of this attribute. This is preserved
   -- between calls to attrCreate/attrPatch/attrDestroy.
   data AttrState decl
 
   -- | Called when this attribute is first attached to a widget in the tree
-  attrCreate :: widget -> decl event -> IO (AttrState decl)
+  attrCreate :: Context -> widget -> decl event -> IO (AttrState decl)
 
   -- | Called when the widget tree is being patched.
-  attrPatch :: widget -> AttrState decl -> decl event1 -> decl event2 -> IO (AttrState decl)
+  attrPatch :: Context -> widget -> AttrState decl -> decl event1 -> decl event2 -> IO (AttrState decl)
 
   -- | Called when the associated widget is removed from the widget tree.
-  attrDestroy :: widget -> AttrState decl -> decl event -> IO ()
-  attrDestroy _widget _state _decl =
+  attrDestroy :: Context -> widget -> AttrState decl -> decl event -> IO ()
+  attrDestroy _ctx _widget _state _decl =
     pure ()
 
   -- | Attach event handlers to this attribute.
-  attrSubscribe :: widget -> AttrState decl -> decl event -> (event -> IO ()) -> IO Subscription
-  attrSubscribe _widget _state _decl _cb =
+  attrSubscribe :: Context -> widget -> AttrState decl -> decl event -> (event -> IO ()) -> IO Subscription
+  attrSubscribe _ctx _widget _state _decl _cb =
     mempty
 
 -- | Runs the create action for each custom attribute.
 createCustomAttributes
-  :: widget
+  :: Context
+  -> widget
   -> Vector (CustomAttributeDecl widget event)
   -> IO (CollectedCustomAttributeStates widget)
-createCustomAttributes widget attrs =
+createCustomAttributes ctx widget attrs =
   flip foldMap attrs $ \(CustomAttributeDecl key attr) -> do
-    state <- attrCreate widget attr
+    state <- attrCreate ctx widget attr
     pure (HashMap.singleton key [CustomAttributeState state])
 
 -- | Patches custom attribute state so it matches the latest declarative attributes.
 patchCustomAttributes
   :: forall widget e1 e2
-   . widget
+   . Context
+  -> widget
   -> CollectedCustomAttributeStates widget
   -> Vector (CustomAttributeDecl widget e1)
   -> Vector (CustomAttributeDecl widget e2)
   -> IO (CollectedCustomAttributeStates widget)
-patchCustomAttributes widget oldStates oldDecls newDecls = do
+patchCustomAttributes ctx widget oldStates oldDecls newDecls = do
 
   -- destroy attributes under keys that no longer exist
   forM_ removedKeys $ \cads ->
     forM_ cads $ \(CustomAttributeDeclState _key decl state) ->
-      attrDestroy widget state decl
+      attrDestroy ctx widget state decl
 
   -- patch attributes under keys that have been neither added nor removed
   preservedStates <- forM preservedKeys $ \(old, new) ->
     zipCreateUpdateDeleteM old new
       (\(CustomAttributeDecl _k decl) ->
-        CustomAttributeState <$> attrCreate widget decl
+        CustomAttributeState <$> attrCreate ctx widget decl
       )
       (\(CustomAttributeDeclState _k1 (d1 :: d1 e1) state) (CustomAttributeDecl _k2 (d2 :: d2 e2)) ->
         case eqT @d1 @d2 of
           Just Refl ->
-            CustomAttributeState <$> attrPatch widget state d1 d2
+            CustomAttributeState <$> attrPatch ctx widget state d1 d2
           Nothing -> do
-            attrDestroy widget state d1
-            CustomAttributeState <$> attrCreate widget d2
+            attrDestroy ctx widget state d1
+            CustomAttributeState <$> attrCreate ctx widget d2
       )
       (\(CustomAttributeDeclState _k decl state) ->
-        attrDestroy widget state decl
+        attrDestroy ctx widget state decl
       )
 
   -- create attributes under newly added keys
   addedStates <- forM addedKeys $ \decls ->
     forM decls $ \(CustomAttributeDecl _key decl) ->
-      CustomAttributeState <$> attrCreate widget decl
+      CustomAttributeState <$> attrCreate ctx widget decl
 
   pure (preservedStates <> addedStates)
 
@@ -177,26 +180,28 @@ patchCustomAttributes widget oldStates oldDecls newDecls = do
 
 -- | Runs the destroy action for the given custom attributes.
 destroyCustomAttributes
-  :: widget
+  :: Context
+  -> widget
   -> CollectedCustomAttributeStates widget
   -> Vector (CustomAttributeDecl widget event)
   -> IO ()
-destroyCustomAttributes widget states decls =
+destroyCustomAttributes ctx widget states decls =
   forM_ (combineDeclStates decls states) $ \dss ->
     forM_ dss $ \(CustomAttributeDeclState _key decl state) ->
-      attrDestroy widget state decl
+      attrDestroy ctx widget state decl
 
 -- | Attaches event listeners to already-created custom attributes.
 subscribeCustomAttributes
-  :: widget
+  :: Context
+  -> widget
   -> CollectedCustomAttributeStates widget
   -> Vector (CustomAttributeDecl widget event)
   -> (event -> IO ())
   -> IO Subscription
-subscribeCustomAttributes widget states decls cb =
+subscribeCustomAttributes ctx widget states decls cb =
   flip foldMap (combineDeclStates decls states) $ \dss ->
     flip foldMap dss $ \(CustomAttributeDeclState _key decl state) ->
-      attrSubscribe widget state decl cb
+      attrSubscribe ctx widget state decl cb
 
 combineDeclStates
   :: forall widget event

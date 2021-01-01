@@ -38,28 +38,27 @@ window
 window key bin' = customAttribute key (Window bin')
 
 newtype Window event = Window (Bin Gtk.Window event)
-  deriving (Functor)
 
 instance CustomAttribute widget Window where
 
   data AttrState Window = WindowState SomeState
 
-  attrCreate _widget (Window bin') =
-    WindowState <$> create bin'
+  attrCreate ctx _widget (Window bin') =
+    WindowState <$> create ctx bin'
 
-  attrPatch _widget (WindowState state1) (Window bin1) (Window bin2) =
-    case patch state1 bin1 bin2 of
+  attrPatch ctx _widget (WindowState state1) (Window bin1) (Window bin2) =
+    case patch ctx state1 bin1 bin2 of
       Keep -> pure $ WindowState state1
       Modify p -> WindowState <$> p
       Replace p -> do
-        destroy state1 bin1
+        destroy ctx state1 bin1
         WindowState <$> p
 
-  attrDestroy _widget (WindowState state) (Window bin') =
-    destroy state bin'
+  attrDestroy ctx _widget (WindowState state) (Window bin') =
+    destroy ctx state bin'
 
-  attrSubscribe _widget (WindowState state) (Window bin') cb =
-    subscribe bin' state cb
+  attrSubscribe ctx _widget (WindowState state) (Window bin') cb =
+    subscribe ctx bin' state cb
 
 -- | Create an attribute for "presenting" (i.e. focusing) a window: when
 -- the value changes then the window will be presented.
@@ -67,16 +66,15 @@ presentWindow :: (Eq a, Typeable a) => a -> Attribute Gtk.Window event
 presentWindow state = customAttribute () (PresentWindow state)
 
 newtype PresentWindow a event = PresentWindow a
-  deriving (Functor)
 
 instance (Typeable a, Eq a) => CustomAttribute Gtk.Window (PresentWindow a) where
 
   data AttrState (PresentWindow a) = PresentWindowState
 
-  attrCreate _window (PresentWindow _) =
+  attrCreate _ctx _window (PresentWindow _) =
     pure PresentWindowState
 
-  attrPatch window' PresentWindowState (PresentWindow a) (PresentWindow b) = do
+  attrPatch _ctx window' PresentWindowState (PresentWindow a) (PresentWindow b) = do
     when (a /= b) $
       Gtk.windowPresent window'
     pure PresentWindowState
@@ -92,18 +90,17 @@ windowIcon :: IconData -> Attribute Gtk.Window event
 windowIcon = customAttribute () . WindowIcon
 
 newtype WindowIcon event = WindowIcon IconData
-  deriving (Functor)
 
 instance CustomAttribute Gtk.Window WindowIcon where
 
   data AttrState WindowIcon = WindowIconState
 
-  attrCreate window' (WindowIcon dat) = do
+  attrCreate _ctx window' (WindowIcon dat) = do
     pixbuf <- loadPixbuf dat
     Gtk.windowSetIcon window' (Just pixbuf)
     pure WindowIconState
 
-  attrPatch window' state (WindowIcon old) (WindowIcon new) = do
+  attrPatch _ctx window' state (WindowIcon old) (WindowIcon new) = do
     when (old /= new) $ do
       pixbuf <- loadPixbuf new
       Gtk.windowSetIcon window' (Just pixbuf)

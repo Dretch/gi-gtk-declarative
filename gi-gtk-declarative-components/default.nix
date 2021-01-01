@@ -1,18 +1,18 @@
 { pkgs ? import ../nixpkgs.nix, compiler ? "ghc883", doBenchmark ? false
 , gi-gtk-declarative
-, gi-gtk-declarative-app-simple
-, gi-gtk-declarative-components
 }:
 
 let
+  lib = import ../lib.nix { inherit pkgs; };
   haskellPackages = pkgs.haskell.packages.${compiler}.override {
     overrides = self: super: {
-      inherit gi-gtk-declarative gi-gtk-declarative-app-simple gi-gtk-declarative-components;
+      gi-gtk-declarative = gi-gtk-declarative;
     };
   };
   variant = if doBenchmark then pkgs.haskell.lib.doBenchmark else pkgs.lib.id;
-  drv = variant (haskellPackages.callCabal2nix "examples" ./. {});
+  drv = lib.checkWithGtkDeps
+    (variant (haskellPackages.callCabal2nix "gi-gtk-declarative-components" ./. {}));
 in
 {
-  examples = drv;
+  gi-gtk-declarative-components = drv;
 }

@@ -47,6 +47,7 @@ library
                       , GI.Gtk.Declarative.Container.Notebook
                       , GI.Gtk.Declarative.Container.Paned
                       , GI.Gtk.Declarative.Container.Patch
+                      , GI.Gtk.Declarative.Context
                       , GI.Gtk.Declarative.EventSource
                       , GI.Gtk.Declarative.EventSource.Subscription
                       , GI.Gtk.Declarative.Patch
@@ -68,6 +69,7 @@ library
                       , hashable
                       , mtl
                       , text
+                      , typerep-map
                       , unordered-containers >= 0.2 && < 0.3
                       , vector
   hs-source-dirs:       src

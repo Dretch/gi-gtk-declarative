@@ -103,16 +103,6 @@ data Attribute widget event where
 -- | A set of CSS classes.
 type ClassSet = HashSet Text
 
--- | Attributes have a 'Functor' instance that maps events in all
--- event handler.
-instance Functor (Attribute widget) where
-  fmap f = \case
-    attr := value            -> attr := value
-    Classes cs               -> Classes cs
-    OnSignalPure   signal eh -> OnSignalPure signal (fmap f eh)
-    OnSignalImpure signal eh -> OnSignalImpure signal (fmap f eh)
-    Custom attr              -> Custom (fmap f attr)
-
 -- | Define the CSS classes for the underlying widget's style context. For these
 -- classes to have any effect, this requires a 'Gtk.CssProvider' with CSS files
 -- loaded, to be added to the GDK screen. You probably want to do this in your

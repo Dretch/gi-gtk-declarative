@@ -1,0 +1,39 @@
+name:                 gi-gtk-declarative-components
+version:              0.6.3
+synopsis:             todo
+description:          todo
+license:              MPL-2.0
+license-file:         LICENSE
+author:               Oskar Wickström
+maintainer:           oskar.wickstrom@gmail.com
+copyright:            Oskar Wickström
+homepage:             https://owickstrom.github.io/gi-gtk-declarative/
+bug-reports:          https://github.com/owickstrom/gi-gtk-declarative/issues
+category:             Graphics
+build-type:           Simple
+cabal-version:        >=1.10
+extra-source-files:   CHANGELOG.md
+tested-with:          GHC == 8.6.3
+
+library
+  exposed-modules:      GI.Gtk.Declarative.Components
+  build-depends:        base                    >=4.10    && <5
+                      , async
+                      , gi-gobject              >= 2      && <3
+                      , gi-glib
+                      , gi-gtk                  >= 3      && <4
+                      , gi-gdk
+                      , hashable
+                      , haskell-gi              >= 0.21   && <0.24
+                      , haskell-gi-base         >= 0.21   && <0.24
+                      , haskell-gi-overloading  == 1.0
+                      , mtl
+                      , pipes                   >= 4      && <5
+                      , pipes-concurrency       >= 2      && <3
+                      , text
+                      , typerep-map
+                      , unordered-containers    >= 0.2 && < 0.3
+                      , gi-gtk-declarative      >= 0.4  && <0.7
+  hs-source-dirs:       src
+  default-language:     Haskell2010
+  ghc-options:          -Wall

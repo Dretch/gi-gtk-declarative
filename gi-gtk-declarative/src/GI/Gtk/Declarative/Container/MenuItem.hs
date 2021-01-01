@@ -44,10 +44,6 @@ data MenuItem event where
   SubMenu
     ::Text -> Container Gtk.Menu (Children MenuItem) event -> MenuItem event
 
-instance Functor MenuItem where
-  fmap f (MenuItem item         ) = MenuItem (fmap f item)
-  fmap f (SubMenu label subMenu') = SubMenu label (fmap f subMenu')
-
 instance ToChildren Gtk.Menu Vector MenuItem
 
 instance ToChildren Gtk.MenuBar Vector MenuItem
@@ -89,34 +85,34 @@ newSubMenuItem label createSubMenu = do
     Nothing -> fail "Failed to create new sub menu item."
 
 instance Patchable MenuItem where
-  create = \case
-    MenuItem item          -> create item
-    SubMenu label subMenu' -> newSubMenuItem label (create subMenu')
-  patch state (MenuItem (c1 :: Bin i1 e1)) (MenuItem (c2 :: Bin i2 e2)) =
+  create ctx = \case
+    MenuItem item          -> create ctx item
+    SubMenu label subMenu' -> newSubMenuItem label (create ctx subMenu')
+  patch ctx state (MenuItem (c1 :: Bin i1 e1)) (MenuItem (c2 :: Bin i2 e2)) =
     case eqT @i1 @i2 of
-      Just Refl -> patch state c1 c2
-      Nothing   -> Replace (create c2)
-  patch (SomeState st) (SubMenu l1 c1) (SubMenu l2 c2) = case st of
-    StateTreeBin top childState | l1 == l2 -> case patch childState c1 c2 of
+      Just Refl -> patch ctx state c1 c2
+      Nothing   -> Replace (create ctx c2)
+  patch ctx (SomeState st) (SubMenu l1 c1) (SubMenu l2 c2) = case st of
+    StateTreeBin top childState | l1 == l2 -> case patch ctx childState c1 c2 of
       Modify  modify     -> Modify (SomeState . StateTreeBin top <$> modify)
       Replace newSubMenu -> Replace (newSubMenuItem l2 newSubMenu)
       Keep               -> Keep
     -- TODO: case for l1 /= l2
-    _ -> Replace (create (SubMenu l2 c2))
-  patch _ _ b2 = Replace (create b2)
-  destroy state (MenuItem (c :: Bin i e)) =
-    destroy state c
-  destroy (SomeState st) (SubMenu _ c) = case st of
+    _ -> Replace (create ctx (SubMenu l2 c2))
+  patch ctx _ _ b2 = Replace (create ctx b2)
+  destroy ctx state (MenuItem (c :: Bin i e)) =
+    destroy ctx state c
+  destroy ctx (SomeState st) (SubMenu _ c) = case st of
     StateTreeBin top childState -> do
-      destroy childState c
+      destroy ctx childState c
       Gtk.toWidget (stateTreeWidget top) >>= Gtk.widgetDestroy
     _ ->
       error "Cannot destroy SubMenu with non-StateTreeBin state"
 
 instance EventSource MenuItem where
-  subscribe (MenuItem item     ) state          cb = subscribe item state cb
-  subscribe (SubMenu _ children) (SomeState st) cb = case st of
-    StateTreeBin _ childState -> subscribe children childState cb
+  subscribe ctx (MenuItem item     ) state          cb = subscribe ctx item state cb
+  subscribe ctx (SubMenu _ children) (SomeState st) cb = case st of
+    StateTreeBin _ childState -> subscribe ctx children childState cb
     _                         -> error
       "Warning: Cannot subscribe to SubMenu events with a non-bin state tree."
 

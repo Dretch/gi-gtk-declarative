@@ -44,22 +44,16 @@ import           GI.Gtk.Declarative.Widget
 data Container widget children event where
   Container ::( Typeable widget,
       Gtk.IsWidget widget,
-      Gtk.IsContainer widget,
-      Functor children
+      Gtk.IsContainer widget
     ) =>
     (Gtk.ManagedPtr widget -> widget) ->
     Vector (Attribute widget event) ->
     children event ->
     Container widget children event
 
-instance Functor (Container widget children) where
-  fmap f (Container ctor attrs children) =
-    Container ctor (fmap f <$> attrs) (fmap f children)
-
 -- | Construct a /container/ widget, i.e. a widget with zero or more children.
 container
   :: ( Typeable widget
-     , Functor child
      , Gtk.IsWidget widget
      , Gtk.IsContainer widget
      , FromWidget (Container widget (Children child)) target
@@ -88,15 +82,15 @@ instance
   Patchable (Container container (Children child))
   where
 
-  create (Container ctor attrs children) = do
+  create ctx (Container ctor attrs children) = do
     let collected = collectAttributes attrs
     widget' <- Gtk.new ctor (constructProperties collected)
     Gtk.widgetShow widget'
     sc <- Gtk.widgetGetStyleContext widget'
     updateClasses sc mempty (collectedClasses collected)
-    ca <- createCustomAttributes widget' (filterToCustom attrs)
+    ca <- createCustomAttributes ctx widget' (filterToCustom attrs)
     childStates <- forM (unChildren children) $ \child -> do
-      childState <- create child
+      childState <- create ctx child
       appendChild widget' child =<< someStateWidget childState
       return childState
     return
@@ -104,7 +98,7 @@ instance
         (StateTreeContainer (StateTreeNode widget' sc collected ca ()) childStates)
       )
 
-  patch (SomeState (st :: StateTree stateType w1 c1 e1 cs)) (Container _ oldAttributes oldChildren) new@(Container (ctor :: Gtk.ManagedPtr
+  patch ctx (SomeState (st :: StateTree stateType w1 c1 e1 cs)) (Container _ oldAttributes oldChildren) new@(Container (ctor :: Gtk.ManagedPtr
       w2
     -> w2) newAttributes (newChildren :: Children c2 e2))
     = case (st, eqT @w1 @w2) of
@@ -124,6 +118,7 @@ instance
                               (collectedClasses oldCollected)
                               (collectedClasses newCollected)
                 newCustomAttributeStates <- patchCustomAttributes
+                  ctx
                   containerWidget
                   oldCustomAttributeStates
                   (filterToCustom oldAttributes)
@@ -134,17 +129,19 @@ instance
                       }
                 SomeState <$> patchInContainer
                   (StateTreeContainer top' childStates)
+                  ctx
                   containerWidget
                   (unChildren oldChildren)
                   (unChildren newChildren)
-              else Replace (create new)
-      _ -> Replace (create new)
+              else Replace (create ctx new)
+      _ -> Replace (create ctx new)
 
-  destroy (SomeState (st :: StateTree stateType w c e cs)) (Container _ attrs (children :: Children child e2)) = do
+  destroy ctx (SomeState (st :: StateTree stateType w c e cs)) (Container _ attrs (children :: Children child e2)) = do
     case (st, eqT @w @container) of
       (StateTreeContainer StateTreeNode {..} childStates, Just Refl) -> do
-        sequence_ (Vector.zipWith destroy childStates (unChildren children))
+        sequence_ (Vector.zipWith (destroy ctx) childStates (unChildren children))
         destroyCustomAttributes
+          ctx
           stateTreeWidget
           stateTreeCustomAttributeStates
           (filterToCustom attrs)
@@ -160,18 +157,19 @@ instance
   EventSource child =>
   EventSource (Container widget (Children child))
   where
-  subscribe (Container ctor props children) (SomeState (st :: StateTree stateType w c e cs)) cb =
+  subscribe ctx (Container ctor props children) (SomeState (st :: StateTree stateType w c e cs)) cb =
     case (st, eqT @w @widget) of
       (StateTreeContainer StateTreeNode {..} childStates, Just Refl) -> do
         parentWidget <- Gtk.unsafeCastTo ctor stateTreeWidget
         handlers' <- foldMap (addSignalHandler cb parentWidget) props
           <> subscribeCustomAttributes
+               ctx
                stateTreeWidget
                stateTreeCustomAttributeStates
                (filterToCustom props)
                cb
         subs <- flip foldMap (Vector.zip (unChildren children) childStates)
-          $ \(c, childState) -> subscribe c childState cb
+          $ \(c, childState) -> subscribe ctx c childState cb
         return (handlers' <> subs)
       _ ->
         error

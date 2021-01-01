@@ -27,6 +27,7 @@ import qualified GI.Gdk                        as Gdk
 import qualified GI.GLib.Constants             as GLib
 import qualified GI.Gtk                        as Gtk
 import           GI.Gtk.Declarative
+import qualified GI.Gtk.Declarative.Context    as Context
 import           GI.Gtk.Declarative.EventSource
 import           GI.Gtk.Declarative.State
 import           Pipes
@@ -72,6 +73,9 @@ data GtkMainExitedException =
 
 instance Exception GtkMainExitedException
 
+context :: Context.Context
+context = Context.empty
+
 -- | Initialize GTK and run the application in it. This is a
 -- convenience function that is highly recommended. If you need more
 -- flexibility, e.g. to set up GTK+ yourself, use 'runLoop' instead.
@@ -103,9 +107,9 @@ runLoop App {..} = do
 
   events                     <- newChan
   (firstState, subscription) <- do
-    firstState <- runUI (create firstMarkup)
+    firstState <- runUI (create context firstMarkup)
     runUI (Gtk.widgetShowAll =<< someStateWidget firstState)
-    sub <- subscribe firstMarkup firstState (publishEvent events)
+    sub <- subscribe context firstMarkup firstState (publishEvent events)
     return (firstState, sub)
 
   Async.withAsync (runProducers events inputs) $ \inputs' -> do
@@ -127,18 +131,18 @@ runLoop App {..} = do
       Transition newModel action -> do
         let newMarkup = view newModel
 
-        (newState, sub) <- case patch oldState oldMarkup newMarkup of
+        (newState, sub) <- case patch context oldState oldMarkup newMarkup of
           Modify ma -> runUI $ do
             cancel oldSubscription
             newState <- ma
-            sub      <- subscribe newMarkup newState (publishEvent events)
+            sub      <- subscribe context newMarkup newState (publishEvent events)
             return (newState, sub)
           Replace createNew -> runUI $ do
-            destroy oldState oldMarkup
+            destroy context oldState oldMarkup
             cancel oldSubscription
             newState <- createNew
             Gtk.widgetShowAll =<< someStateWidget newState
-            sub <- subscribe newMarkup newState (publishEvent events)
+            sub <- subscribe context newMarkup newState (publishEvent events)
             return (newState, sub)
           Keep -> return (oldState, oldSubscription)
 

@@ -3,6 +3,7 @@ resolver: lts-13.24
 packages:
 - gi-gtk-declarative
 - gi-gtk-declarative-app-simple
+- gi-gtk-declarative-components
 - examples
 
 extra-deps:

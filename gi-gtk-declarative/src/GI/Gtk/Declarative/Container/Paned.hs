@@ -45,7 +45,6 @@ data Pane event = Pane
   { paneProperties :: PaneProperties
   , paneChild      :: Widget event
   }
-  deriving (Functor)
 
 -- | Values used when packing a pane into a 'Gtk.Paned'.
 data PaneProperties = PaneProperties
@@ -67,12 +66,12 @@ pane :: PaneProperties -> Widget event -> Pane event
 pane paneProperties paneChild = Pane { .. }
 
 instance Patchable Pane where
-  create = create . paneChild
-  patch s b1 b2 = patch s (paneChild b1) (paneChild b2)
-  destroy s b = destroy s (paneChild b)
+  create ctx = create ctx . paneChild
+  patch ctx s b1 b2 = patch ctx s (paneChild b1) (paneChild b2)
+  destroy ctx s b = destroy ctx s (paneChild b)
 
 instance EventSource Pane where
-  subscribe Pane {..} = subscribe paneChild
+  subscribe ctx Pane {..} = subscribe ctx paneChild
 
 -- | Construct a 'Gtk.Paned' based on attributes and two child 'Pane's.
 paned

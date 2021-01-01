@@ -46,9 +46,6 @@ data Bin widget event where
     -> Widget event
     -> Bin widget event
 
-instance Functor (Bin widget) where
-  fmap f (Bin ctor attrs child) = Bin ctor (fmap f <$> attrs) (fmap f child)
-
 -- | Construct a /bin/ widget, i.e. a widget with exactly one child.
 bin
   :: ( Typeable widget
@@ -68,7 +65,7 @@ bin ctor attrs = fromWidget . Bin ctor attrs
 --
 
 instance (Gtk.IsBin parent) => Patchable (Bin parent) where
-  create (Bin (ctor :: Gtk.ManagedPtr w -> w) attrs child) = do
+  create ctx (Bin (ctor :: Gtk.ManagedPtr w -> w) attrs child) = do
     let collected = collectAttributes attrs
     widget' <- Gtk.new ctor (constructProperties collected)
     Gtk.widgetShow widget'
@@ -76,9 +73,9 @@ instance (Gtk.IsBin parent) => Patchable (Bin parent) where
     sc <- Gtk.widgetGetStyleContext widget'
     updateClasses sc mempty (collectedClasses collected)
 
-    ca <- createCustomAttributes widget' (filterToCustom attrs)
+    ca <- createCustomAttributes ctx widget' (filterToCustom attrs)
 
-    childState  <- create child
+    childState  <- create ctx child
     childWidget <- someStateWidget childState
     maybe (pure ()) Gtk.widgetDestroy =<< Gtk.binGetChild widget'
     Gtk.containerAdd widget' childWidget
@@ -87,7 +84,7 @@ instance (Gtk.IsBin parent) => Patchable (Bin parent) where
         (StateTreeBin (StateTreeNode widget' sc collected ca ()) childState)
       )
 
-  patch (SomeState (st :: StateTree stateType w1 c1 e1 cs)) (Bin _ oldAttributes oldChild) (Bin (ctor :: Gtk.ManagedPtr
+  patch ctx (SomeState (st :: StateTree stateType w1 c1 e1 cs)) (Bin _ oldAttributes oldChild) (Bin (ctor :: Gtk.ManagedPtr
       w2
     -> w2) newAttributes newChild)
     = case (st, eqT @w1 @w2) of
@@ -107,6 +104,7 @@ instance (Gtk.IsBin parent) => Patchable (Bin parent) where
                             (collectedClasses oldCollected)
                             (collectedClasses newCollected)
               newCustomAttributeStates <- patchCustomAttributes
+                ctx
                 binWidget
                 oldCustomAttributeStates
                 (filterToCustom oldAttributes)
@@ -116,10 +114,10 @@ instance (Gtk.IsBin parent) => Patchable (Bin parent) where
                     { stateTreeCollectedAttributes = newCollected
                     , stateTreeCustomAttributeStates = newCustomAttributeStates
                     }
-              case patch oldChildState oldChild newChild of
+              case patch ctx oldChildState oldChild newChild of
                 Modify  modify    -> SomeState . StateTreeBin top' <$> modify
                 Replace createNew -> do
-                  destroy oldChildState oldChild
+                  destroy ctx oldChildState oldChild
                   newChildState <- createNew
                   childWidget   <- someStateWidget newChildState
                   Gtk.widgetShow childWidget
@@ -128,14 +126,15 @@ instance (Gtk.IsBin parent) => Patchable (Bin parent) where
                   Gtk.containerAdd binWidget childWidget
                   return (SomeState (StateTreeBin top' newChildState))
                 Keep -> return (SomeState st)
-            else Replace (create (Bin ctor newAttributes newChild))
-      _ -> Replace (create (Bin ctor newAttributes newChild))
+            else Replace (create ctx (Bin ctor newAttributes newChild))
+      _ -> Replace (create ctx (Bin ctor newAttributes newChild))
 
-  destroy (SomeState (st :: StateTree stateType w c e cs)) (Bin _ attrs child) = do
+  destroy ctx (SomeState (st :: StateTree stateType w c e cs)) (Bin _ attrs child) = do
     case (st, eqT @w @parent) of
       (StateTreeBin StateTreeNode {..} childState, Just Refl) -> do
-        destroy childState child
+        destroy ctx childState child
         destroyCustomAttributes
+          ctx
           stateTreeWidget
           stateTreeCustomAttributeStates
           (filterToCustom attrs)
@@ -148,17 +147,18 @@ instance (Gtk.IsBin parent) => Patchable (Bin parent) where
 --
 
 instance Gtk.IsBin parent => EventSource (Bin parent) where
-  subscribe (Bin ctor props child) (SomeState (st :: StateTree stateType w c e cs)) cb =
+  subscribe ctx (Bin ctor props child) (SomeState (st :: StateTree stateType w c e cs)) cb =
     case (st, eqT @w @parent) of
       (StateTreeBin StateTreeNode {..} childState, Just Refl) -> do
         binWidget <- Gtk.unsafeCastTo ctor stateTreeWidget
         foldMap (addSignalHandler cb binWidget) props
           <> subscribeCustomAttributes
+               ctx
                stateTreeWidget
                stateTreeCustomAttributeStates
                (filterToCustom props)
                cb
-          <> subscribe child childState cb
+          <> subscribe ctx child childState cb
       _ -> error "Cannot subscribe to Bin events with a non-bin state tree."
 
 instance a ~ b => FromWidget (Bin a) (Bin b) where

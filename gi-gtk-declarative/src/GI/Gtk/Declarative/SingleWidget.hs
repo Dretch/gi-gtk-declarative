@@ -34,26 +34,23 @@ import           GI.Gtk.Declarative.Widget
 -- | Declarative version of a /leaf/ widget, i.e. a widget without any children.
 data SingleWidget widget event where
   SingleWidget
-    ::(Typeable widget, Gtk.IsWidget widget, Functor (Attribute widget))
+    ::(Typeable widget, Gtk.IsWidget widget)
     => (Gtk.ManagedPtr widget -> widget)
     -> Vector (Attribute widget event)
     -> SingleWidget widget event
 
-instance Functor (SingleWidget widget) where
-  fmap f (SingleWidget ctor attrs) = SingleWidget ctor (fmap f <$> attrs)
-
 instance Patchable (SingleWidget widget) where
-  create = \case
+  create ctx = \case
     SingleWidget ctor attrs -> do
       let collected = collectAttributes attrs
       widget' <- Gtk.new ctor (constructProperties collected)
       Gtk.widgetShow widget'
       sc <- Gtk.widgetGetStyleContext widget'
       updateClasses sc mempty (collectedClasses collected)
-      ca <- createCustomAttributes widget' (filterToCustom attrs)
+      ca <- createCustomAttributes ctx widget' (filterToCustom attrs)
       return
         (SomeState (StateTreeWidget (StateTreeNode widget' sc collected ca ())))
-  patch (SomeState (st :: StateTree stateType w child event cs)) (SingleWidget (_ :: Gtk.ManagedPtr
+  patch ctx (SomeState (st :: StateTree stateType w child event cs)) (SingleWidget (_ :: Gtk.ManagedPtr
       w1
     -> w1) oldAttributes) (SingleWidget (ctor :: Gtk.ManagedPtr w2 -> w2) newAttributes)
     = case (st, eqT @w @w1, eqT @w1 @w2) of
@@ -73,6 +70,7 @@ instance Patchable (SingleWidget widget) where
                             (collectedClasses oldCollected)
                             (collectedClasses newCollected)
               newCustomAttributeStates <- patchCustomAttributes
+                ctx
                 w
                 oldCustomAttributeStates
                 (filterToCustom oldAttributes)
@@ -82,12 +80,13 @@ instance Patchable (SingleWidget widget) where
                    , stateTreeCustomAttributeStates = newCustomAttributeStates
                    }
               return (SomeState (StateTreeWidget top'))
-            else Replace (create (SingleWidget ctor newAttributes))
-      _ -> Replace (create (SingleWidget ctor newAttributes))
-  destroy (SomeState (st :: StateTree stateType w child e cs)) (SingleWidget _ attrs) = do
+            else Replace (create ctx (SingleWidget ctor newAttributes))
+      _ -> Replace (create ctx (SingleWidget ctor newAttributes))
+  destroy ctx (SomeState (st :: StateTree stateType w child e cs)) (SingleWidget _ attrs) = do
     case (st, eqT @w @widget) of
       (StateTreeWidget StateTreeNode {..}, Just Refl) -> do
         destroyCustomAttributes
+          ctx
           stateTreeWidget
           stateTreeCustomAttributeStates
           (filterToCustom $ attrs)
@@ -95,7 +94,7 @@ instance Patchable (SingleWidget widget) where
       _ -> error "SingleWidget destroy called with incompatiable state"
 
 instance EventSource (SingleWidget widget) where
-  subscribe (SingleWidget (_ :: Gtk.ManagedPtr w1 -> w1) props) (SomeState (st :: StateTree
+  subscribe ctx (SingleWidget (_ :: Gtk.ManagedPtr w1 -> w1) props) (SomeState (st :: StateTree
       stateType
       w2
       child
@@ -105,6 +104,7 @@ instance EventSource (SingleWidget widget) where
       (StateTreeWidget StateTreeNode {..}, Just Refl) -> do
         foldMap (addSignalHandler cb stateTreeWidget) props
           <> subscribeCustomAttributes
+               ctx
                stateTreeWidget
                stateTreeCustomAttributeStates
                (filterToCustom props)

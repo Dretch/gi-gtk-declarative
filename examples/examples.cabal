@@ -18,12 +18,12 @@ tested-with:          GHC == 8.6.3
 executable example
   main-is:              Main.hs
   other-modules:        AddBoxes
+                      , Components
                       , CSS
                       , CustomAttribute
                       , Dialog
                       , Exit
                       , FileChooserButton
-                      , Functor
                       , Grid
                       , Hello
                       , ListBox
@@ -41,9 +41,11 @@ executable example
                       , gi-gtk
                       , gi-gtk-declarative
                       , gi-gtk-declarative-app-simple
+                      , gi-gtk-declarative-components
                       , gi-gdk
                       , haskell-gi
                       , haskell-gi-base
+                      , mtl
                       , pipes
                       , pipes-extras
                       , random

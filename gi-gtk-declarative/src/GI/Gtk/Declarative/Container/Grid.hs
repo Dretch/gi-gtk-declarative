@@ -29,7 +29,6 @@ data GridChild event =
     { properties :: GridChildProperties
     , child      :: Widget event
     }
-  deriving (Functor)
 
 -- | Values used when /packing/ child widgets into grids.
 data GridChildProperties =
@@ -51,13 +50,13 @@ instance Default GridChildProperties where
   def = defaultGridChildProperties
 
 instance Patchable GridChild where
-  create = create . child
-  patch s b1 b2 | properties b1 == properties b2 = patch s (child b1) (child b2)
-                | otherwise                      = Replace (create b2)
-  destroy s b = destroy s (child b)
+  create ctx = create ctx . child
+  patch ctx s b1 b2 | properties b1 == properties b2 = patch ctx s (child b1) (child b2)
+                        | otherwise                      = Replace (create ctx b2)
+  destroy ctx s b = destroy ctx s (child b)
 
 instance EventSource GridChild where
-  subscribe GridChild {..} = subscribe child
+  subscribe ctx GridChild {..} = subscribe ctx child
 
 instance ToChildren Gtk.Grid Vector GridChild
 

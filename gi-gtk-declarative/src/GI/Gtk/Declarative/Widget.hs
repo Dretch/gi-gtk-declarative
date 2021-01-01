@@ -28,26 +28,22 @@ data Widget event where
   Widget
     ::( Typeable widget
        , Patchable widget
-       , Functor widget
        , EventSource widget
        )
     => widget event
     -> Widget event
 
-instance Functor Widget where
-  fmap f (Widget w) = Widget (fmap f w)
-
 -- | 'Widget' is itself patchable, by delegating to the underlying
 -- widget instances.
 instance Patchable Widget where
-  create (Widget w) = create w
-  patch s (Widget (w1 :: t1 e1)) (Widget (w2 :: t2 e2)) = case eqT @t1 @t2 of
-    Just Refl -> patch s w1 w2
-    _         -> Replace (create w2)
-  destroy s (Widget w) = destroy s w
+  create ctx (Widget w) = create ctx w
+  patch ctx s (Widget (w1 :: t1 e1)) (Widget (w2 :: t2 e2)) = case eqT @t1 @t2 of
+    Just Refl -> patch ctx s w1 w2
+    _         -> Replace (create ctx w2)
+  destroy ctx s (Widget w) = destroy ctx s w
 
 instance EventSource Widget where
-  subscribe (Widget w) = subscribe w
+  subscribe ctx (Widget w) = subscribe ctx w
 
 -- | Convert a widget to a target type. This is deliberately unconstrained in
 -- it's types, and is used by smart constructors to implement return type
@@ -60,7 +56,6 @@ class FromWidget widget target where
 instance ( Typeable parent
          , Typeable child
          , Patchable (parent child)
-         , Functor (parent child)
          , EventSource (parent child)
          )
          => FromWidget (parent child) Widget where

@@ -26,6 +26,7 @@ import           Data.Vector                    ( Vector
 import qualified Data.Vector                   as Vector
 import qualified GI.Gtk                        as Gtk
 
+import           GI.Gtk.Declarative.Context
 import           GI.Gtk.Declarative.Container.Class
 import           GI.Gtk.Declarative.Patch
 import           GI.Gtk.Declarative.State
@@ -40,11 +41,12 @@ patchInContainer
      , IsContainer container child
      )
   => StateTree 'ContainerState container child event cs
+  -> Context
   -> container
   -> Vector (child e1)
   -> Vector (child e2)
   -> IO (StateTree 'ContainerState container child event cs)
-patchInContainer (StateTreeContainer top children) container os' ns' = do
+patchInContainer (StateTreeContainer top children) ctx container os' ns' = do
   let maxLength = maximum ([length children, length os', length ns'] :: [Int])
       indices   = Vector.enumFromN 0 (fromIntegral maxLength)
   newChildren <- foldMap
@@ -62,12 +64,12 @@ patchInContainer (StateTreeContainer top children) container os' ns' = do
     -- In case we have a corresponding old and new declarative widget, we patch
     -- the GTK widget.
     (i, Just oldChildState, Just old, Just new) ->
-      case patch oldChildState old new of
+      case patch ctx oldChildState old new of
         Modify  modify       -> pure <$> modify
         Replace createWidget -> do
           newChildState  <- createWidget
           newChildWidget <- someStateWidget newChildState
-          let destroyOld = destroy oldChildState old
+          let destroyOld = destroy ctx oldChildState old
           replaceChild container i destroyOld new newChildWidget
           return (pure newChildState)
         Keep -> return (pure oldChildState)
@@ -78,7 +80,7 @@ patchInContainer (StateTreeContainer top children) container os' ns' = do
     -- When there is a new declarative widget, or one that lacks a corresponding
     -- GTK widget, create and add it.
     (_i, Nothing, _, Just n) -> do
-      newChildState <- create n
+      newChildState <- create ctx n
       w             <- someStateWidget newChildState
       appendChild container n w
       return (Vector.singleton newChildState)
@@ -86,7 +88,7 @@ patchInContainer (StateTreeContainer top children) container os' ns' = do
     -- When a declarative widget has been removed, remove the GTK widget from
     -- the container.
     (_i, Just oldChildState, Just old, Nothing) -> do
-      destroy oldChildState old
+      destroy ctx oldChildState old
       return Vector.empty
 
     -- When there are more old declarative widgets than GTK widgets, we can

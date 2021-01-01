@@ -35,7 +35,6 @@ data BoxChild event = BoxChild
   { properties :: BoxChildProperties
   , child      :: Widget event
   }
-  deriving (Functor)
 
 -- | Values used when /packing/ child widgets into boxes.
 data BoxChildProperties = BoxChildProperties
@@ -54,13 +53,13 @@ instance Default BoxChildProperties where
   def = defaultBoxChildProperties
 
 instance Patchable BoxChild where
-  create = create . child
-  patch s b1 b2 | properties b1 == properties b2 = patch s (child b1) (child b2)
-                | otherwise                      = Replace (create b2)
-  destroy s b = destroy s (child b)
+  create ctx = create ctx . child
+  patch ctx s b1 b2 | properties b1 == properties b2 = patch ctx s (child b1) (child b2)
+                        | otherwise                      = Replace (create ctx b2)
+  destroy ctx s b = destroy ctx s (child b)
 
 instance EventSource BoxChild where
-  subscribe BoxChild {..} = subscribe child
+  subscribe ctx BoxChild {..} = subscribe ctx child
 
 instance ToChildren Gtk.Box Vector BoxChild
 

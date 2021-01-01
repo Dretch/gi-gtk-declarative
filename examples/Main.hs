@@ -5,12 +5,12 @@ import           System.Environment
 import           System.IO
 
 import qualified AddBoxes
+import qualified Components
 import qualified CSS
 import qualified CustomAttribute
 import qualified Dialog
 import qualified Exit
 import qualified FileChooserButton
-import qualified Functor
 import qualified Grid
 import qualified Hello
 import qualified ListBox
@@ -24,11 +24,11 @@ main :: IO ()
 main =
   let examples =
           [ ("AddBoxes"         , AddBoxes.main)
+          , ("Components"       , Components.main)
           , ("CustomAttribute"  , CustomAttribute.main)
           , ("FileChooserButton", FileChooserButton.main)
           , ("Hello"            , Hello.main)
           , ("ListBox"          , ListBox.main)
-          , ("Functor"          , Functor.main)
           , ("Grid"             , Grid.main)
           , ("Exit"             , Exit.main)
           , ("ManyBoxes"        , ManyBoxes.main)
