@@ -31,10 +31,11 @@ import           Control.Exception             (SomeException, catch, finally)
 import qualified Control.Concurrent.Async      as Async
 import           Control.Monad                 (ap, liftM, unless, void)
 import           Control.Monad.State.Class     (MonadState(get, put))
+import           Data.Foldable                 (for_)
 import           Data.Hashable                 (Hashable(..))
 import           Data.HashMap.Strict           (HashMap)
 import qualified Data.HashMap.Strict           as HashMap
-import           Data.IORef                    (IORef, modifyIORef, newIORef, readIORef, writeIORef)
+import           Data.IORef                    (IORef, atomicModifyIORef, modifyIORef, newIORef, readIORef, writeIORef)
 import qualified Data.TMap as TMap
 import           Data.Typeable
 import qualified GI.Gtk                        as Gtk
@@ -63,8 +64,9 @@ class Typeable c => Component (c :: * -> *) where
   data ComponentAction c
 
   -- | Called when the component is first shown. This creates the initial
-  -- component state from the declarative component.
-  createComponent :: c event -> ComponentState c
+  -- component state from the declarative component, and optionally
+  -- provides an initial action to start the component doing stuff.
+  createComponent :: c event -> (ComponentState c, Maybe (ComponentAction c))
 
   -- | Called when a new declarative component is applied to the existing
   -- component state. This method should copy any required state from the
@@ -159,6 +161,7 @@ data PatchContext = PatchContext
   , components :: HashMap ComponentId StoredComponent
   , nextComponents :: IORef (HashMap ComponentId StoredComponent)
   , nextComponentId :: IORef ComponentId
+  , events :: Chan DynamicAction
   }
 
 data EventSourceContext = EventSourceContext
@@ -186,8 +189,8 @@ instance EventSource (ComponentWidget comp) where
 instance Patchable (ComponentWidget comp) where
 
   create ctx (ComponentWidget c) = do
-    let state = createComponent c
-    (cid, ctx') <- storeNewComponent ctx c state (view state)
+    let (state, action) = createComponent c
+    (cid, ctx') <- storeNewComponent ctx c state (view state) action
     ss <- create ctx' (view state)
     pure (wrapState cid ss)
   
@@ -281,8 +284,11 @@ runWith postInitGtk rootCtor = do
   assertRuntimeSupportsBoundThreads
   
   let rootComponent = rootCtor id
-  rootComponentState <- newIORef $ createComponent rootComponent
+      (initState, initAction) = createComponent rootComponent
+  rootComponentState <- newIORef initState
   events <- newChan
+  for_ initAction $
+    writeChan events . DynamicAction rootComponentId
   components <- newIORef mempty
   nextComponentId <- newIORef $ succ rootComponentId
 
@@ -303,7 +309,7 @@ runLoop
 runLoop rootComponent rootComponentState events components nextComponentId = do
 
   rootView <- view <$> readIORef rootComponentState
-  pCtx <- patchContext rootComponentId components nextComponentId
+  pCtx <- patchContext events rootComponentId components nextComponentId
   rootSomeState <- runUI $ create pCtx rootView
   rootSubscription <- rootSubscribe rootView rootSomeState
 
@@ -321,7 +327,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
     rerender :: LoopState c -> IO (LoopState c)
     rerender ls = do
       newRootView <- view <$> readIORef rootComponentState
-      pCtx <- patchContext rootComponentId components nextComponentId
+      pCtx <- patchContext events rootComponentId components nextComponentId
       case patch pCtx (rootSomeState ls) (rootView ls) newRootView of
         Modify modify -> runUI $ do
           cancel (rootSubscription ls)
@@ -334,7 +340,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
             }
         Replace createNew -> runUI $ do
           cancel (rootSubscription ls)
-          dCtx <- patchContext rootComponentId components nextComponentId
+          dCtx <- patchContext events rootComponentId components nextComponentId
           destroy dCtx (rootSomeState ls) (rootView ls)
           newRootSomeState <- createNew
           -- todo: show all?
@@ -436,11 +442,12 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
         processAction $ DynamicAction pid action'
 
 patchContext
- :: ComponentId
+ :: Chan DynamicAction
+ -> ComponentId
  -> IORef (HashMap ComponentId StoredComponent)
  -> IORef ComponentId
  -> IO Context
-patchContext currentComponentId nextComponents nextComponentId = do
+patchContext events currentComponentId nextComponents nextComponentId = do
   components <- readIORef nextComponents
   pure . Context . TMap.one $ PatchContext{..}
 
@@ -450,14 +457,16 @@ storeNewComponent
  -> comp (ComponentAction parentComp)
  -> ComponentState comp
  -> Widget (ComponentAction comp)
+ -> Maybe (ComponentAction comp)
  -> IO (ComponentId, Context)
-storeNewComponent ctx comp state view' = do
+storeNewComponent ctx comp state view' action = do
   let ctxData = getPatchContext ctx
-  cid <- readIORef (nextComponentId ctxData)
-  writeIORef (nextComponentId ctxData) (succ cid)
+  cid <- atomicModifyIORef (nextComponentId ctxData) (\i -> (succ i, i))
   modifyIORef (nextComponents ctxData) $ \components ->
     let pid = currentComponentId ctxData
     in HashMap.insert cid (StoredComponent pid comp state view') components
+  for_ action $
+    writeChan (events ctxData) . DynamicAction cid
   pure (cid, Context . TMap.one $ ctxData{currentComponentId = cid})
 
 getStoredComponent

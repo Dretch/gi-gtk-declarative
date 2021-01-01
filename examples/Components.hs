@@ -7,8 +7,9 @@
 
 module Components where
 
+import           Control.Concurrent             (threadDelay)
 import           Control.Monad                  (when)
-import           Control.Monad.State.Class      (MonadState(get, put))
+import           Control.Monad.State.Class      (MonadState(get, put), modify)
 import           Data.Text                      (pack)
 
 import           GI.Gtk                         ( Box(..)
@@ -27,24 +28,30 @@ instance Component IncButton where
 
   data ComponentState IncButton = IncButtonState Int
 
-  data ComponentAction IncButton = IncCounter
+  data ComponentAction IncButton = Inc | Reset
 
-  createComponent _decl = IncButtonState 0
+  createComponent _decl = (IncButtonState 0, Just Inc)
 
   patchComponent state _decl = state
 
   update (IncButton cb) = \case
-    IncCounter -> do
-      IncButtonState i <- get
-      let i' = i + 1
-      put $ IncButtonState i'
-      updateIO_ $ putStrLn ("about to tell parent that i = " <> show i')
-      updateParent $ cb i'
+    Reset -> do
+      put $ IncButtonState 0
+      notifyParent
+    Inc -> do
+      modify $ \(IncButtonState i) -> IncButtonState (i + 1)
+      notifyParent
+      updateIO $ Just Inc <$ threadDelay 1000000
+    where
+      notifyParent = do
+        IncButtonState i <- get
+        updateIO_ $ putStrLn ("about to tell parent that i = " <> show i)
+        updateParent $ cb i
 
   view (IncButtonState i) =
     widget Button
-      [ #label := pack ("Increment i (current value = " <> show i <> ")")
-      , on #clicked IncCounter
+      [ #label := pack ("Reset (i = " <> show i <> ") to 0")
+      , on #clicked Reset
       ]
 
 data ExampleApp event = ExampleApp (AppAction -> event)
@@ -55,7 +62,7 @@ instance Component ExampleApp where
 
   data ComponentAction ExampleApp = ReceiveInc Int | CloseWindow
 
-  createComponent _decl = ExampleAppState
+  createComponent _decl = (ExampleAppState, Nothing)
 
   update (ExampleApp cb) = \case
     CloseWindow ->
