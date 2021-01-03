@@ -311,6 +311,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
   rootView <- view <$> readIORef rootComponentState
   pCtx <- patchContext events rootComponentId components nextComponentId
   rootSomeState <- runUI $ create pCtx rootView
+  runUI (Gtk.widgetShowAll =<< someStateWidget rootSomeState)
   rootSubscription <- rootSubscribe rootView rootSomeState
 
   loop LoopState{..}
@@ -343,7 +344,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
           dCtx <- patchContext events rootComponentId components nextComponentId
           destroy dCtx (rootSomeState ls) (rootView ls)
           newRootSomeState <- createNew
-          -- todo: show all?
+          runUI (Gtk.widgetShowAll =<< someStateWidget newRootSomeState)
           newRootSubscription <- rootSubscribe newRootView newRootSomeState
           pure LoopState
             { rootView = newRootView
