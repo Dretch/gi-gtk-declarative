@@ -129,17 +129,17 @@ updateParent :: event -> UpdateM c event ()
 updateParent = UpdateParent
 
 -- | The result of running an `UpdateM`
-data UpdateResult a = UpdateResult
-  { updateValue :: a
-  , updatedState :: Bool
-  , updateExited :: Bool
-  }
+data UpdateResult a
+  = UpdateResultValue
+      { updateValue :: a
+      , updatedState :: Bool
+      }
+  | UpdateResultExited
 
 updateResult :: UpdateResult ()
-updateResult = UpdateResult
+updateResult = UpdateResultValue
  { updateValue = ()
  , updatedState = False
- , updateExited = False
  }
 
 newtype ComponentId = ComponentId Int
@@ -320,9 +320,9 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
     loop ls = do
       event <- readChan events
       processAction event >>= \case
-        UpdateResult{updateExited = True} -> pure ()
-        UpdateResult{updatedState = True} -> rerender ls >>= loop
-        _                                 -> loop ls
+        UpdateResultExited                      -> pure ()
+        UpdateResultValue{updatedState = True}  -> rerender ls >>= loop
+        UpdateResultValue{updatedState = False} -> loop ls
     
     rerender :: LoopState c -> IO (LoopState c)
     rerender ls = do
@@ -388,12 +388,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
       UpdatePure a ->
         pure updateResult{updateValue = a}
       UpdateBind cmd f -> do
-        res1 <- runRootUpdateM cmd
-        res2 <- runRootUpdateM (f (updateValue res1))
-        pure res2
-          { updateExited = updateExited res1 || updateExited res2
-          , updatedState = updatedState res1 || updatedState res2
-          }
+        runUpdateBind cmd f runRootUpdateM
       UpdateStateGet -> do
         val <- readIORef rootComponentState
         pure updateResult{ updateValue = val }
@@ -401,13 +396,9 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
         writeIORef rootComponentState s
         pure updateResult{ updatedState = True }
       UpdateIO cmd -> do
-        void . Async.async $ do
-          cmd >>= \case
-            Nothing -> pure ()
-            Just action' -> writeChan events (DynamicAction rootComponentId action')
-        pure updateResult
+        runUpdateIO cmd rootComponentId
       UpdateParent Exit -> do
-        pure updateResult{ updateExited = True }
+        pure UpdateResultExited
 
     runNonRootUpdateM
      :: forall comp parentComp a. (Component comp, Component parentComp)
@@ -420,12 +411,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
       UpdatePure a ->
         pure updateResult{updateValue = a}
       UpdateBind cmd f -> do
-        res1 <- runNonRootUpdateM pid cid comp' cmd
-        res2 <- runNonRootUpdateM pid cid comp' (f (updateValue res1))
-        pure res2
-          { updateExited = updateExited res1 || updateExited res2
-          , updatedState = updatedState res1 || updatedState res2
-          }
+        runUpdateBind cmd f (runNonRootUpdateM pid cid comp')
       UpdateStateGet -> do
         (state, _) <- getStoredComponent' cid <$> readIORef components
         pure updateResult{ updateValue = state }
@@ -433,13 +419,37 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
         setStoredComponent' components cid comp' s (view s)
         pure updateResult{ updatedState = True }
       UpdateIO cmd -> do
+        runUpdateIO cmd cid
+      UpdateParent action' -> do
+        processAction $ DynamicAction pid action'
+
+    runUpdateBind
+     :: UpdateM comp e a
+     -> (a -> UpdateM comp e b)
+     -> (forall x. UpdateM comp e x -> IO (UpdateResult x))
+     -> IO (UpdateResult b)
+    runUpdateBind cmd f runner =
+        runner cmd >>= \case
+          UpdateResultExited ->
+            pure UpdateResultExited
+          UpdateResultValue{updateValue, updatedState} -> do
+              runner (f updateValue) >>= \case
+                UpdateResultExited ->
+                  pure UpdateResultExited
+                UpdateResultValue{updateValue = updateValue', updatedState = updatedState'} ->
+                  pure $ UpdateResultValue updateValue' (updatedState || updatedState')
+
+    runUpdateIO
+     :: Component comp
+     => IO (Maybe (ComponentAction comp))
+     -> ComponentId
+     -> IO (UpdateResult ())
+    runUpdateIO cmd cid = do
         void . Async.async $ do
           cmd >>= \case
             Nothing -> pure ()
             Just action' -> writeChan events (DynamicAction cid action')
         pure updateResult
-      UpdateParent action' -> do
-        processAction $ DynamicAction pid action'
 
 patchContext
  :: Chan DynamicAction
