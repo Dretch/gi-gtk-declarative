@@ -85,7 +85,7 @@ class Typeable c => Component (c :: * -> *) where
 
   -- | Provides the tree of widgets that display this component. Called
   -- whenever the state changes (and possibly other times too).
-  view :: ComponentState c -> Widget (ComponentAction c)
+  view :: c event -> ComponentState c -> Widget (ComponentAction c)
 
 -- | An "update action" that happens when a component of type `c` receives an
 -- action from a child widget. The `event` type parameter describes the type of
@@ -190,15 +190,16 @@ instance Patchable (ComponentWidget comp) where
 
   create ctx (ComponentWidget c) = do
     let (state, action) = createComponent c
-    (cid, ctx') <- storeNewComponent ctx c state (view state) action
-    ss <- create ctx' (view state)
+        view' = view c state
+    (cid, ctx') <- storeNewComponent ctx c state view' action
+    ss <- create ctx' view'
     pure (wrapState cid ss)
   
   patch ctx ss (ComponentWidget _c1) (ComponentWidget c2) =
     let (cid, ss') = unwrapState ss
         (oldState, oldView) = getStoredComponent ctx cid
         newState = patchComponent oldState c2
-        newView = view newState
+        newView = view c2 newState
         ctx' = setCurrentComponentId ctx cid
     in case patch ctx' ss' oldView newView of
       Modify cmd -> Modify $ do
@@ -308,7 +309,7 @@ runLoop
  -> IO ()
 runLoop rootComponent rootComponentState events components nextComponentId = do
 
-  rootView <- view <$> readIORef rootComponentState
+  rootView <- view rootComponent <$> readIORef rootComponentState
   pCtx <- patchContext events rootComponentId components nextComponentId
   rootSomeState <- runUI $ create pCtx rootView
   runUI (Gtk.widgetShowAll =<< someStateWidget rootSomeState)
@@ -327,7 +328,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
     
     rerender :: LoopState c -> IO (LoopState c)
     rerender ls = do
-      newRootView <- view <$> readIORef rootComponentState
+      newRootView <- view rootComponent <$> readIORef rootComponentState
       pCtx <- patchContext events rootComponentId components nextComponentId
       case patch pCtx (rootSomeState ls) (rootView ls) newRootView of
         Modify modify -> runUI $ do
@@ -417,7 +418,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
         (state, _) <- getStoredComponent' cid <$> readIORef components
         pure updateResult{ updateValue = state }
       UpdateStatePut s -> do
-        setStoredComponent' components cid comp' s (view s)
+        setStoredComponent' components cid comp' s (view comp' s)
         pure updateResult{ updatedState = True }
       UpdateIO cmd -> do
         runUpdateIO cmd cid

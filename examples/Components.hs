@@ -48,7 +48,7 @@ instance Component IncButton where
         updateIO_ $ putStrLn ("about to tell parent that i = " <> show i)
         updateParent $ cb i
 
-  view (IncButtonState i) =
+  view (IncButton _cb) (IncButtonState i) =
     widget Button
       [ #label := pack ("Reset (i = " <> show i <> ") to 0")
       , on #clicked Reset
@@ -73,7 +73,7 @@ instance Component ExampleApp where
         updateIO_ $ putStrLn "i == 10, that's enough!"
         updateParent (cb Exit)
 
-  view _state =
+  view _decl _state =
     bin
       Window
       [ #title := "Components"
