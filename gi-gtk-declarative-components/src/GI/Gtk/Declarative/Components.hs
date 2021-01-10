@@ -156,17 +156,12 @@ data StoredComponent =
     , storedView :: !(Widget (ComponentAction c)) -- ^ Must only be updated inside `patch`, otherwise it gets out-of-sync with the state tree
     }
 
-data PatchContext = PatchContext
+data ContextData = ContextData
   { currentComponentId :: ComponentId
   , components :: HashMap ComponentId StoredComponent
   , nextComponents :: IORef (HashMap ComponentId StoredComponent)
   , nextComponentId :: IORef ComponentId
   , events :: Chan DynamicAction
-  }
-
-data EventSourceContext = EventSourceContext
-  { esComponents :: HashMap ComponentId StoredComponent
-  , esEvents :: Chan DynamicAction
   }
 
 -- | A dynamically typed action that is destined for a particular component.
@@ -182,7 +177,8 @@ data ComponentWidget comp event where
 instance EventSource (ComponentWidget comp) where
   subscribe ctx (ComponentWidget _comp) state _cb = do
     let (cid, state') = unwrapState state
-        (chan, _state, compView) = getEventSourceContext @comp ctx cid
+        (_state, compView) = getStoredComponent @comp ctx cid
+        chan = getEvents ctx
         cb' = writeChan chan . DynamicAction cid
     subscribe ctx compView state' cb'
 
@@ -309,8 +305,8 @@ runLoop
 runLoop rootComponent rootComponentState events components nextComponentId = do
 
   rootView <- view rootComponent <$> readIORef rootComponentState
-  pCtx <- patchContext events rootComponentId components nextComponentId
-  rootSomeState <- runUI $ create pCtx rootView
+  ctx <- contextData events rootComponentId components nextComponentId
+  rootSomeState <- runUI $ create ctx rootView
   runUI (Gtk.widgetShowAll =<< someStateWidget rootSomeState)
   rootSubscription <- rootSubscribe rootView rootSomeState
 
@@ -328,8 +324,8 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
     rerender :: LoopState c -> IO (LoopState c)
     rerender ls = do
       newRootView <- view rootComponent <$> readIORef rootComponentState
-      pCtx <- patchContext events rootComponentId components nextComponentId
-      case patch pCtx (rootSomeState ls) (rootView ls) newRootView of
+      ctx <- contextData events rootComponentId components nextComponentId
+      case patch ctx (rootSomeState ls) (rootView ls) newRootView of
         Modify modify -> runUI $ do
           cancel (rootSubscription ls)
           newRootSomeState <- modify
@@ -341,7 +337,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
             }
         Replace createNew -> runUI $ do
           cancel (rootSubscription ls)
-          dCtx <- patchContext events rootComponentId components nextComponentId
+          dCtx <- contextData events rootComponentId components nextComponentId
           destroy dCtx (rootSomeState ls) (rootView ls)
           newRootSomeState <- createNew
           runUI (Gtk.widgetShowAll =<< someStateWidget newRootSomeState)
@@ -359,9 +355,9 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
      -> SomeState
      -> IO Subscription
     rootSubscribe rootView rootSomeState = do
-      esCtx <- eventSourceContext events components
+      ctx <- contextData events rootComponentId components nextComponentId
       let cb = writeChan events . DynamicAction rootComponentId
-      subscribe esCtx rootView rootSomeState cb
+      subscribe ctx rootView rootSomeState cb
 
     processAction :: DynamicAction -> IO (UpdateResult ())
     processAction (DynamicAction cid (action :: ComponentAction d)) = do
@@ -455,15 +451,15 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
             Just action' -> writeChan events (DynamicAction cid action')
         pure updateResult
 
-patchContext
+contextData
  :: Chan DynamicAction
  -> ComponentId
  -> IORef (HashMap ComponentId StoredComponent)
  -> IORef ComponentId
  -> IO Context
-patchContext events currentComponentId nextComponents nextComponentId = do
+contextData events currentComponentId nextComponents nextComponentId = do
   components <- readIORef nextComponents
-  pure . Context . TMap.one $ PatchContext{..}
+  pure . Context . TMap.one $ ContextData{..}
 
 storeNewComponent
  :: (Component comp, Component parentComp)
@@ -474,7 +470,7 @@ storeNewComponent
  -> Maybe (ComponentAction comp)
  -> IO (ComponentId, Context)
 storeNewComponent ctx comp state view' action = do
-  let ctxData = getPatchContext ctx
+  let ctxData = getContextData ctx
   cid <- atomicModifyIORef (nextComponentId ctxData) (\i -> (succ i, i))
   modifyIORef (nextComponents ctxData) $ \components ->
     let pid = currentComponentId ctxData
@@ -489,7 +485,7 @@ getStoredComponent
  -> ComponentId
  -> (ComponentState comp, Widget (ComponentAction comp))
 getStoredComponent ctx cid =
-  getStoredComponent' cid (components $ getPatchContext ctx)
+  getStoredComponent' cid (components $ getContextData ctx)
 
 getStoredComponent'
  :: forall comp. Component comp
@@ -514,7 +510,7 @@ setStoredComponent
  -> Widget (ComponentAction comp)
  -> IO ()
 setStoredComponent ctx cid comp state view' = do
-  let ctxData = getPatchContext ctx
+  let ctxData = getContextData ctx
   setStoredComponent' (nextComponents ctxData) cid comp state view'
 
 setStoredComponent'
@@ -542,36 +538,17 @@ setCurrentComponentId (Context tmap) cid =
 
 removeComponent :: Context -> ComponentId -> IO ()
 removeComponent ctx cid = do
-  let ctxData = getPatchContext ctx
+  let ctxData = getContextData ctx
   modifyIORef (nextComponents ctxData) (HashMap.delete cid)
 
-getPatchContext :: Context -> PatchContext
-getPatchContext (Context ctx) =
+getEvents :: Context -> Chan DynamicAction
+getEvents = events . getContextData
+
+getContextData :: Context -> ContextData
+getContextData (Context ctx) =
   case TMap.lookup ctx of
     Just c   -> c
     Nothing  -> error "Missing patch context: this is a bug."
-
-eventSourceContext
- :: Chan DynamicAction
- -> IORef (HashMap ComponentId StoredComponent)
- -> IO Context
-eventSourceContext esEvents esComponentsVar = do
-  esComponents <- readIORef esComponentsVar
-  pure . Context . TMap.one $ EventSourceContext{..}
-
-getEventSourceContext
- :: Component comp
- => Context
- -> ComponentId
- -> (Chan DynamicAction, ComponentState comp, Widget (ComponentAction comp))
-getEventSourceContext (Context ctx) cid =
-  let (state', view') = getStoredComponent' cid esComponents
-  in (esEvents, state', view')
-  where
-    EventSourceContext{..} =
-      case TMap.lookup ctx of
-        Just c  -> c
-        Nothing -> error "Missing event source context: this is a bug"
 
 -- | Assert that the program was linked using the @-threaded@ flag, to
 -- enable the threaded runtime required by this module.
