@@ -95,4 +95,5 @@ Unfinished, badly designed, undocumented, full of bugs. Really just for informat
 ## FAQ
 
 **Q. Why build this as a fork instead of a module (like gi-gtk-declarative-app-simple)?**
-I tried, but could not find a way to pass the component "context" around when creating/patching components.
+
+A. I tried, but could not find a way to pass the component "context" around when creating/patching components.
