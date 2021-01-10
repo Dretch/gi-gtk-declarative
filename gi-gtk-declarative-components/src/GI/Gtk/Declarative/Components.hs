@@ -153,7 +153,7 @@ data StoredComponent =
     { parentComponentId :: !ComponentId
     , nonRootComponent :: !(c (ComponentAction parent))
     , storedState :: !(ComponentState c)
-    , storedView :: !(Widget (ComponentAction c))
+    , storedView :: !(Widget (ComponentAction c)) -- ^ Must only be updated inside `patch`, otherwise it gets out-of-sync with the state tree
     }
 
 data PatchContext = PatchContext
@@ -210,15 +210,14 @@ instance Patchable (ComponentWidget comp) where
         wrapState cid <$> cmd
       Keep -> Modify $ do
         setStoredComponent ctx' cid c2 newState newView
-        pure (wrapState cid ss)
+        pure ss
   
-  destroy ctx ss (ComponentWidget (_ :: c e)) =
+  destroy ctx ss (ComponentWidget (_ :: c e)) = do
     let (cid, ss') = unwrapState ss
         (_state, view') = getStoredComponent @c ctx cid
         ctx' = setCurrentComponentId ctx cid
-    in do
-      destroy ctx' ss' view'
-      removeComponent ctx' cid
+    destroy ctx' ss' view'
+    removeComponent ctx' cid
 
 -- | The underlying widget custom state, wrapped up with the id of this component
 -- (which we can use to obtain the component state, etc)
@@ -378,12 +377,12 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
           Nothing -> do
             -- the component must have been destroyed already (not a bug - due to async IO)
             pure updateResult
-          Just (StoredComponent pid (comp :: d' _e) _state _view) -> do
+          Just (StoredComponent pid (comp :: d' _e) _state view') -> do
             case eqT @d @d' of
               Nothing ->
                 error "Unexpected non-root action type. This is a bug."
               Just Refl ->
-                runNonRootUpdateM pid cid comp (update comp action)
+                runNonRootUpdateM pid cid comp view' (update comp action)
 
     runRootUpdateM :: UpdateM c AppAction a -> IO (UpdateResult a)
     runRootUpdateM = \case
@@ -407,18 +406,21 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
      => ComponentId
      -> ComponentId
      -> comp (ComponentAction parentComp)
+     -> Widget (ComponentAction comp)
      -> UpdateM comp (ComponentAction parentComp) a
      -> IO (UpdateResult a)
-    runNonRootUpdateM pid cid comp' = \case
+    runNonRootUpdateM pid cid comp' view' = \case
       UpdatePure a ->
         pure updateResult{updateValue = a}
       UpdateBind cmd f -> do
-        runUpdateBind cmd f (runNonRootUpdateM pid cid comp')
+        runUpdateBind cmd f (runNonRootUpdateM pid cid comp' view')
       UpdateStateGet -> do
         (state, _) <- getStoredComponent' cid <$> readIORef components
         pure updateResult{ updateValue = state }
       UpdateStatePut s -> do
-        setStoredComponent' components cid comp' s (view comp' s)
+        -- the view must not change until re-render (when `patch` is
+        -- called), to avoid it getting out-of-sync with the state tree
+        setStoredComponent' components cid comp' s view'
         pure updateResult{ updatedState = True }
       UpdateIO cmd -> do
         runUpdateIO cmd cid
