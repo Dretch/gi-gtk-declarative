@@ -72,7 +72,7 @@ data ComponentAction SomeParentComponent =
 component (IncButton ParentComponentCallback)
 ```
 
-## Bigger Example
+### Bigger Example
 
 This is an application built with components: https://github.com/Dretch/foundationdb-explorer/tree/components
 
