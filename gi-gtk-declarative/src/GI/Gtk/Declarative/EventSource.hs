@@ -5,7 +5,7 @@ module GI.Gtk.Declarative.EventSource
   )
 where
 
-import           GI.Gtk.Declarative.Component.Internal (ComponentContext)
+import {-# SOURCE #-} GI.Gtk.Declarative.Component.Internal (ComponentContext)
 import           GI.Gtk.Declarative.State
 import           GI.Gtk.Declarative.EventSource.Subscription
 

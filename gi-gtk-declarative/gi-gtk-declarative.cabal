@@ -38,6 +38,7 @@ library
                       , GI.Gtk.Declarative.Attributes.Internal.EventHandler
                       , GI.Gtk.Declarative.Attributes.Internal.Conversions
                       , GI.Gtk.Declarative.Bin
+                      , GI.Gtk.Declarative.Component
                       , GI.Gtk.Declarative.Component.Internal
                       , GI.Gtk.Declarative.Container
                       , GI.Gtk.Declarative.Container.Box
@@ -55,10 +56,12 @@ library
                       , GI.Gtk.Declarative.State
                       , GI.Gtk.Declarative.Widget
                       , GI.Gtk.Declarative.Widget.Conversions
-  build-depends:        base                   >=4.10 && <5
+  build-depends:        async
+                      , base                   >=4.10 && <5
                       , bytestring
                       , containers             >= 0.6 && < 0.7
                       , data-default-class     >= 0.1  && <0.2
+                      , gi-gdk                 >= 3    && <4
                       , gi-gdkpixbuf           >= 2    && <3
                       , gi-gobject             >= 2    && <3
                       , gi-glib                >= 2    && <3

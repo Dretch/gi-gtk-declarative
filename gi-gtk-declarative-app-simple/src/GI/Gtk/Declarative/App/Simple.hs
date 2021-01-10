@@ -27,7 +27,7 @@ import qualified GI.Gdk                                as Gdk
 import qualified GI.GLib.Constants                     as GLib
 import qualified GI.Gtk                                as Gtk
 import           GI.Gtk.Declarative
-import qualified GI.Gtk.Declarative.Component.Internal (ComponentContext)
+import           GI.Gtk.Declarative.Component          (ComponentContext)
 import           GI.Gtk.Declarative.EventSource
 import           GI.Gtk.Declarative.State
 import           Pipes

@@ -21,12 +21,11 @@ module GI.Gtk.Declarative.Component.Internal
 where
 
 import           Control.Concurrent
-import           Control.Monad                 (ap, liftM, unless, void)
+import           Control.Monad                 (ap, liftM)
 import           Control.Monad.State.Class     (MonadState(get, put))
 import           Data.Hashable                 (Hashable(..))
 import           Data.HashMap.Strict           (HashMap)
-import qualified Data.HashMap.Strict           as HashMap
-import           Data.IORef                    (IORef, atomicModifyIORef, modifyIORef, newIORef, readIORef, writeIORef)
+import           Data.IORef                    (IORef)
 import           Data.Typeable
 
 import           GI.Gtk.Declarative.Widget

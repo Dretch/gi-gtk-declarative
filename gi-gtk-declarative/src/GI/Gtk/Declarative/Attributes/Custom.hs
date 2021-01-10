@@ -31,7 +31,7 @@ import           Data.Typeable
 import           Data.Vector                                 (Vector)
 import qualified Data.Vector                                 as Vector
 
-import           GI.Gtk.Declarative.Component.Internal       (ComponentContext)
+import {-# SOURCE #-} GI.Gtk.Declarative.Component.Internal       (ComponentContext)
 import           GI.Gtk.Declarative.EventSource.Subscription
 
 -- | The declarative form of a custom attribute. The actual type of of the
@@ -180,7 +180,7 @@ patchCustomAttributes ctx widget oldStates oldDecls newDecls = do
 
 -- | Runs the destroy action for the given custom attributes.
 destroyCustomAttributes
-  :: ContexComponentContextt
+  :: ComponentContext
   -> widget
   -> CollectedCustomAttributeStates widget
   -> Vector (CustomAttributeDecl widget event)

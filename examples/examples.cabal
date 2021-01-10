@@ -41,7 +41,6 @@ executable example
                       , gi-gtk
                       , gi-gtk-declarative
                       , gi-gtk-declarative-app-simple
-                      , gi-gtk-declarative-components
                       , gi-gdk
                       , haskell-gi
                       , haskell-gi-base

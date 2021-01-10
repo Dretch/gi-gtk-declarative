@@ -9,7 +9,7 @@ module GI.Gtk.Declarative.Patch
   )
 where
 
-import           GI.Gtk.Declarative.Component.Internal (ComponentContext)
+import {-# SOURCE #-} GI.Gtk.Declarative.Component.Internal (ComponentContext)
 import           GI.Gtk.Declarative.State
 
 -- | A possible action to take on an existing 'Gtk.Widget', decided by the

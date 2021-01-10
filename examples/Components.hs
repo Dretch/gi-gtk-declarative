@@ -20,7 +20,7 @@ import           GI.Gtk                         ( Box(..)
                                                 , WindowPosition(..) )
 import           GI.Gtk.Declarative
 import           GI.Gtk.Declarative.Widget      ()
-import           GI.Gtk.Declarative.Components
+import           GI.Gtk.Declarative.Component
 
 data IncButton event = IncButton (Int -> event)
 

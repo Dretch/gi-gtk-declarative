@@ -12,8 +12,9 @@
 {-# LANGUAGE TypeApplications              #-}
 {-# LANGUAGE TypeFamilies                  #-}
 
-module GI.Gtk.Declarative.Components
+module GI.Gtk.Declarative.Component
   ( Component(..)
+  , ComponentContext
   , UpdateM
   , updateIO
   , updateIO_
@@ -28,14 +29,11 @@ where
 import           Control.Concurrent
 import           Control.Exception             (SomeException, catch, finally)
 import qualified Control.Concurrent.Async      as Async
-import           Control.Monad                 (ap, liftM, unless, void)
-import           Control.Monad.State.Class     (MonadState(get, put))
+import           Control.Monad                 (unless, void)
 import           Data.Foldable                 (for_)
-import           Data.Hashable                 (Hashable(..))
 import           Data.HashMap.Strict           (HashMap)
 import qualified Data.HashMap.Strict           as HashMap
 import           Data.IORef                    (IORef, atomicModifyIORef, modifyIORef, newIORef, readIORef, writeIORef)
-import qualified Data.TMap as TMap
 import           Data.Typeable
 import qualified GI.Gtk                        as Gtk
 import qualified GI.Gdk                        as Gdk

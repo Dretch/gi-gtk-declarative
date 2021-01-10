@@ -11,7 +11,6 @@ in
     packages = p: [
       project.gi-gtk-declarative
       project.gi-gtk-declarative-app-simple
-      project.gi-gtk-declarative-components
       project.examples
     ];
     buildInputs = [

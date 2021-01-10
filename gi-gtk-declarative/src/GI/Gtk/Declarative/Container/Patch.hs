@@ -19,7 +19,6 @@ module GI.Gtk.Declarative.Container.Patch
   )
 where
 
-import           Data.Foldable                         ( foldMap )
 import           Data.Vector                           ( Vector
                                                        , (!?)
                                                        )
