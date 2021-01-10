@@ -41,11 +41,11 @@ import qualified GI.GLib.Constants             as GLib
 import           System.Exit
 import           System.IO
 
-import           GI.Gtk.Declarative
 import           GI.Gtk.Declarative.Component.Internal
 import           GI.Gtk.Declarative.EventSource
-import           GI.Gtk.Declarative.Patch()
+import           GI.Gtk.Declarative.Patch
 import           GI.Gtk.Declarative.State
+import           GI.Gtk.Declarative.Widget
 
 rootComponentId :: ComponentId
 rootComponentId = ComponentId 0
