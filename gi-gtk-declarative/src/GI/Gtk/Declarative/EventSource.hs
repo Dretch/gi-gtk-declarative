@@ -5,7 +5,7 @@ module GI.Gtk.Declarative.EventSource
   )
 where
 
-import           GI.Gtk.Declarative.Context
+import           GI.Gtk.Declarative.Component.Internal (ComponentContext)
 import           GI.Gtk.Declarative.State
 import           GI.Gtk.Declarative.EventSource.Subscription
 
@@ -13,7 +13,7 @@ import           GI.Gtk.Declarative.EventSource.Subscription
 -- 'Subscription'.
 class EventSource widget where
   subscribe
-    :: Context
+    :: ComponentContext
     -> widget event     -- ^ Declarative widget with event handlers.
     -> SomeState        -- ^ State of rendered widget tree.
     -> (event -> IO ()) -- ^ Event callback, invoked on each emitted event until

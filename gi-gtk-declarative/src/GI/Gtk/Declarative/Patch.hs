@@ -9,7 +9,7 @@ module GI.Gtk.Declarative.Patch
   )
 where
 
-import           GI.Gtk.Declarative.Context
+import           GI.Gtk.Declarative.Component.Internal (ComponentContext)
 import           GI.Gtk.Declarative.State
 
 -- | A possible action to take on an existing 'Gtk.Widget', decided by the
@@ -32,9 +32,9 @@ class Patchable widget where
   -- | Given a declarative widget that is 'Patchable', return an IO action that
   -- can create a new corresponding 'Gtk.Widget'. The created widget should be
   -- use in corresponding patch modifications, until it is replaced.
-  create :: Context -> widget e -> IO SomeState
+  create :: ComponentContext -> widget e -> IO SomeState
   -- | Given two declarative widgets of the same widget type (but not
   -- necessarily of the same event types,) calculate a 'Patch'.
-  patch :: Context -> SomeState -> widget e1 -> widget e2 -> Patch
+  patch :: ComponentContext -> SomeState -> widget e1 -> widget e2 -> Patch
   -- | Given a previously created declarative widget, destroy it.
-  destroy :: Context -> SomeState -> widget e -> IO ()
+  destroy :: ComponentContext -> SomeState -> widget e -> IO ()

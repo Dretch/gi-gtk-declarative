@@ -19,14 +19,14 @@ module GI.Gtk.Declarative.Container.Patch
   )
 where
 
-import           Data.Foldable                  ( foldMap )
-import           Data.Vector                    ( Vector
-                                                , (!?)
-                                                )
-import qualified Data.Vector                   as Vector
-import qualified GI.Gtk                        as Gtk
+import           Data.Foldable                         ( foldMap )
+import           Data.Vector                           ( Vector
+                                                       , (!?)
+                                                       )
+import qualified Data.Vector                           as Vector
+import qualified GI.Gtk                                as Gtk
 
-import           GI.Gtk.Declarative.Context
+import           GI.Gtk.Declarative.Component.Internal (ComponentContext)
 import           GI.Gtk.Declarative.Container.Class
 import           GI.Gtk.Declarative.Patch
 import           GI.Gtk.Declarative.State
@@ -41,7 +41,7 @@ patchInContainer
      , IsContainer container child
      )
   => StateTree 'ContainerState container child event cs
-  -> Context
+  -> ComponentContext
   -> container
   -> Vector (child e1)
   -> Vector (child e2)

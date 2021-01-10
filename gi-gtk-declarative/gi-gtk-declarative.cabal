@@ -38,6 +38,7 @@ library
                       , GI.Gtk.Declarative.Attributes.Internal.EventHandler
                       , GI.Gtk.Declarative.Attributes.Internal.Conversions
                       , GI.Gtk.Declarative.Bin
+                      , GI.Gtk.Declarative.Component.Internal
                       , GI.Gtk.Declarative.Container
                       , GI.Gtk.Declarative.Container.Box
                       , GI.Gtk.Declarative.Container.Class
@@ -47,7 +48,6 @@ library
                       , GI.Gtk.Declarative.Container.Notebook
                       , GI.Gtk.Declarative.Container.Paned
                       , GI.Gtk.Declarative.Container.Patch
-                      , GI.Gtk.Declarative.Context
                       , GI.Gtk.Declarative.EventSource
                       , GI.Gtk.Declarative.EventSource.Subscription
                       , GI.Gtk.Declarative.Patch

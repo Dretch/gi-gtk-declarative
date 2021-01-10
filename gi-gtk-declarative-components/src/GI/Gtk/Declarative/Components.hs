@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveFunctor                 #-}
 {-# LANGUAGE GADTs                         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving    #-}
 {-# LANGUAGE FlexibleContexts              #-}
@@ -45,128 +44,13 @@ import           System.Exit
 import           System.IO
 
 import           GI.Gtk.Declarative
-import           GI.Gtk.Declarative.Context
+import           GI.Gtk.Declarative.Component.Internal
 import           GI.Gtk.Declarative.EventSource
 import           GI.Gtk.Declarative.Patch()
 import           GI.Gtk.Declarative.State
 
--- | A declarative component. Types in this class must have a single type
--- parameter which describes the type of the events emitted by the component.
-class Typeable c => Component (c :: * -> *) where
-
-  -- | The internal state of the component. This is initialized when the
-  -- component is first shown, and then varies over the lifetime of the
-  -- component as `patchComponent` and `update` modify it.
-  data ComponentState c
-  
-  -- | Internal actions that are emitted by child widgets and make this
-  -- component do stuff.
-  data ComponentAction c
-
-  -- | Called when the component is first shown. This creates the initial
-  -- component state from the declarative component, and optionally
-  -- provides an initial action to start the component doing stuff.
-  createComponent :: c event -> (ComponentState c, Maybe (ComponentAction c))
-
-  -- | Called when a new declarative component is applied to the existing
-  -- component state. This method should copy any required state from the
-  -- new declarative component. This method will never be called for top
-  -- level components - so there is a default implementation that returns
-  -- an error: components intended to be used a non-top-level components
-  -- should implement this method.
-  patchComponent :: ComponentState c -> c event -> ComponentState c
-  patchComponent _ _ =
-    error "patchComponent not implemented: it should be implemented for all non-top-level components."
-
-  -- | Called when an action is emitted by a child event. The `UpdateM`
-  -- monad allows updating the component state, running asynchronous IO
-  -- actions, and sending events to the parent on this component.
-  update :: c event -> ComponentAction c -> UpdateM c event ()
-
-  -- | Provides the tree of widgets that display this component. Called
-  -- whenever the state changes (and possibly other times too).
-  view :: c event -> ComponentState c -> Widget (ComponentAction c)
-
--- | An "update action" that happens when a component of type `c` receives an
--- action from a child widget. The `event` type parameter describes the type of
--- events that the parent widget can receive. This implements `MonadState` to
--- allow getting/setting the component state.
-data UpdateM c event a where
-  UpdatePure :: a -> UpdateM c event a
-  UpdateBind :: UpdateM c event a -> (a -> UpdateM c event b) -> UpdateM c event b
-  UpdateStateGet :: UpdateM c event (ComponentState c)
-  UpdateStatePut :: ComponentState c -> UpdateM c event ()
-  UpdateIO :: IO (Maybe (ComponentAction c)) -> UpdateM c event ()
-  UpdateParent :: event -> UpdateM c event ()
-
-instance Functor (UpdateM c event) where
-  fmap = liftM
-
-instance Applicative (UpdateM c event) where
-  pure = UpdatePure
-  (<*>) = ap
-
-instance Monad (UpdateM c event) where
-  (>>=) = UpdateBind
-
-instance MonadState (ComponentState c) (UpdateM c event) where
-  get = UpdateStateGet
-  put = UpdateStatePut
-
--- | An update action that asynchronously runs some IO - and then maybe
--- emits another action.
-updateIO :: IO (Maybe (ComponentAction c)) -> UpdateM c event ()
-updateIO = UpdateIO
-
--- | An update action that asynchronously runs some IO (and never emits
--- another action).
-updateIO_ :: IO () -> UpdateM c event ()
-updateIO_ cmd = UpdateIO (Nothing <$ cmd)
-
--- | An update action that (synchronously) sends an action to the parent
--- component.
-updateParent :: event -> UpdateM c event ()
-updateParent = UpdateParent
-
--- | The result of running an `UpdateM`
-data UpdateResult a
-  = UpdateResultValue
-      { updateValue :: a
-      , updatedState :: Bool
-      }
-  | UpdateResultExited
-
-updateResult :: UpdateResult ()
-updateResult = UpdateResultValue
- { updateValue = ()
- , updatedState = False
- }
-
-newtype ComponentId = ComponentId Int
-  deriving (Show, Enum, Eq, Hashable)
-
 rootComponentId :: ComponentId
 rootComponentId = ComponentId 0
-
-data StoredComponent =
-  forall c parent. (Component c, Component parent) => StoredComponent
-    { parentComponentId :: !ComponentId
-    , nonRootComponent :: !(c (ComponentAction parent))
-    , storedState :: !(ComponentState c)
-    , storedView :: !(Widget (ComponentAction c)) -- ^ Must only be updated inside `patch`, otherwise it gets out-of-sync with the state tree
-    }
-
-data ContextData = ContextData
-  { currentComponentId :: ComponentId
-  , components :: HashMap ComponentId StoredComponent
-  , nextComponents :: IORef (HashMap ComponentId StoredComponent)
-  , nextComponentId :: IORef ComponentId
-  , events :: Chan DynamicAction
-  }
-
--- | A dynamically typed action that is destined for a particular component.
-data DynamicAction = forall comp. Component comp => DynamicAction
-   ComponentId (ComponentAction comp)
 
 data ComponentWidget comp event where
   ComponentWidget
@@ -178,7 +62,7 @@ instance EventSource (ComponentWidget comp) where
   subscribe ctx (ComponentWidget _comp) state _cb = do
     let (cid, state') = unwrapState state
         (_state, compView) = getStoredComponent @comp ctx cid
-        chan = getEvents ctx
+        chan = events ctx
         cb' = writeChan chan . DynamicAction cid
     subscribe ctx compView state' cb'
 
@@ -196,7 +80,7 @@ instance Patchable (ComponentWidget comp) where
         (oldState, oldView) = getStoredComponent ctx cid
         newState = patchComponent oldState c2
         newView = view c2 newState
-        ctx' = setCurrentComponentId ctx cid
+        ctx' = ctx{ currentComponentId = cid }
     in case patch ctx' ss' oldView newView of
       Modify cmd -> Modify $ do
         setStoredComponent ctx' cid c2 newState newView
@@ -211,7 +95,7 @@ instance Patchable (ComponentWidget comp) where
   destroy ctx ss (ComponentWidget (_ :: c e)) = do
     let (cid, ss') = unwrapState ss
         (_state, view') = getStoredComponent @c ctx cid
-        ctx' = setCurrentComponentId ctx cid
+        ctx' = ctx{ currentComponentId = cid }
     destroy ctx' ss' view'
     removeComponent ctx' cid
 
@@ -234,7 +118,7 @@ unwrapState (SomeState (tree :: StateTree t w c e cs)) =
     Nothing ->
       error "Custom state not of expected type: this is a bug."
 
--- todo: investigate replacing this with a StateTreeComponent constructor (and Context with explicit ComponentContext) ?
+-- todo: investigate replacing this with a StateTreeComponent constructor?
 modifyCustomState
  :: forall t w e c cs1 cs2
   . (cs1 -> cs2)
@@ -305,7 +189,7 @@ runLoop
 runLoop rootComponent rootComponentState events components nextComponentId = do
 
   rootView <- view rootComponent <$> readIORef rootComponentState
-  ctx <- contextData events rootComponentId components nextComponentId
+  ctx <- componentContext events rootComponentId components nextComponentId
   rootSomeState <- runUI $ create ctx rootView
   runUI (Gtk.widgetShowAll =<< someStateWidget rootSomeState)
   rootSubscription <- rootSubscribe rootView rootSomeState
@@ -324,7 +208,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
     rerender :: LoopState c -> IO (LoopState c)
     rerender ls = do
       newRootView <- view rootComponent <$> readIORef rootComponentState
-      ctx <- contextData events rootComponentId components nextComponentId
+      ctx <- componentContext events rootComponentId components nextComponentId
       case patch ctx (rootSomeState ls) (rootView ls) newRootView of
         Modify modify -> runUI $ do
           cancel (rootSubscription ls)
@@ -337,7 +221,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
             }
         Replace createNew -> runUI $ do
           cancel (rootSubscription ls)
-          dCtx <- contextData events rootComponentId components nextComponentId
+          dCtx <- componentContext events rootComponentId components nextComponentId
           destroy dCtx (rootSomeState ls) (rootView ls)
           newRootSomeState <- createNew
           runUI (Gtk.widgetShowAll =<< someStateWidget newRootSomeState)
@@ -355,7 +239,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
      -> SomeState
      -> IO Subscription
     rootSubscribe rootView rootSomeState = do
-      ctx <- contextData events rootComponentId components nextComponentId
+      ctx <- componentContext events rootComponentId components nextComponentId
       let cb = writeChan events . DynamicAction rootComponentId
       subscribe ctx rootView rootSomeState cb
 
@@ -451,41 +335,40 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
             Just action' -> writeChan events (DynamicAction cid action')
         pure updateResult
 
-contextData
+componentContext
  :: Chan DynamicAction
  -> ComponentId
  -> IORef (HashMap ComponentId StoredComponent)
  -> IORef ComponentId
- -> IO Context
-contextData events currentComponentId nextComponents nextComponentId = do
+ -> IO ComponentContext
+componentContext events currentComponentId nextComponents nextComponentId = do
   components <- readIORef nextComponents
-  pure . Context . TMap.one $ ContextData{..}
+  pure $ ComponentContext{..}
 
 storeNewComponent
  :: (Component comp, Component parentComp)
- => Context
+ => ComponentContext
  -> comp (ComponentAction parentComp)
  -> ComponentState comp
  -> Widget (ComponentAction comp)
  -> Maybe (ComponentAction comp)
- -> IO (ComponentId, Context)
+ -> IO (ComponentId, ComponentContext)
 storeNewComponent ctx comp state view' action = do
-  let ctxData = getContextData ctx
-  cid <- atomicModifyIORef (nextComponentId ctxData) (\i -> (succ i, i))
-  modifyIORef (nextComponents ctxData) $ \components ->
-    let pid = currentComponentId ctxData
+  cid <- atomicModifyIORef (nextComponentId ctx) (\i -> (succ i, i))
+  modifyIORef (nextComponents ctx) $ \components ->
+    let pid = currentComponentId ctx
     in HashMap.insert cid (StoredComponent pid comp state view') components
   for_ action $
-    writeChan (events ctxData) . DynamicAction cid
-  pure (cid, Context . TMap.one $ ctxData{currentComponentId = cid})
+    writeChan (events ctx) . DynamicAction cid
+  pure (cid, ctx{currentComponentId = cid})
 
 getStoredComponent
  :: forall comp. Component comp
- => Context
+ => ComponentContext
  -> ComponentId
  -> (ComponentState comp, Widget (ComponentAction comp))
 getStoredComponent ctx cid =
-  getStoredComponent' cid (components $ getContextData ctx)
+  getStoredComponent' cid (components ctx)
 
 getStoredComponent'
  :: forall comp. Component comp
@@ -503,15 +386,14 @@ getStoredComponent' cid map' =
 
 setStoredComponent
  :: (Component comp, Component parentComp)
- => Context
+ => ComponentContext
  -> ComponentId
  -> comp (ComponentAction parentComp)
  -> ComponentState comp
  -> Widget (ComponentAction comp)
  -> IO ()
 setStoredComponent ctx cid comp state view' = do
-  let ctxData = getContextData ctx
-  setStoredComponent' (nextComponents ctxData) cid comp state view'
+  setStoredComponent' (nextComponents ctx) cid comp state view'
 
 setStoredComponent'
  :: (Component comp, Component parentComp)
@@ -531,24 +413,10 @@ setStoredComponent' components cid comp state view' = do
         , nonRootComponent = comp
         , parentComponentId
         }
-  
-setCurrentComponentId :: Context -> ComponentId -> Context
-setCurrentComponentId (Context tmap) cid =
-  Context $ TMap.adjust (\pc -> pc{ currentComponentId = cid}) tmap
 
-removeComponent :: Context -> ComponentId -> IO ()
+removeComponent :: ComponentContext -> ComponentId -> IO ()
 removeComponent ctx cid = do
-  let ctxData = getContextData ctx
-  modifyIORef (nextComponents ctxData) (HashMap.delete cid)
-
-getEvents :: Context -> Chan DynamicAction
-getEvents = events . getContextData
-
-getContextData :: Context -> ContextData
-getContextData (Context ctx) =
-  case TMap.lookup ctx of
-    Just c   -> c
-    Nothing  -> error "Missing patch context: this is a bug."
+  modifyIORef (nextComponents ctx) (HashMap.delete cid)
 
 -- | Assert that the program was linked using the @-threaded@ flag, to
 -- enable the threaded runtime required by this module.

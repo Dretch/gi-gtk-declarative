@@ -15,23 +15,23 @@ module GI.Gtk.Declarative.App.Simple
 where
 
 import           Control.Concurrent
-import qualified Control.Concurrent.Async      as Async
-import           Control.Exception              ( SomeException,
-                                                  Exception,
-                                                  catch,
-                                                  finally,
-                                                  throwIO)
+import qualified Control.Concurrent.Async              as Async
+import           Control.Exception                     ( SomeException,
+                                                         Exception,
+                                                         catch,
+                                                         finally,
+                                                         throwIO )
 import           Control.Monad
 import           Data.Typeable
-import qualified GI.Gdk                        as Gdk
-import qualified GI.GLib.Constants             as GLib
-import qualified GI.Gtk                        as Gtk
+import qualified GI.Gdk                                as Gdk
+import qualified GI.GLib.Constants                     as GLib
+import qualified GI.Gtk                                as Gtk
 import           GI.Gtk.Declarative
-import qualified GI.Gtk.Declarative.Context    as Context
+import qualified GI.Gtk.Declarative.Component.Internal (ComponentContext)
 import           GI.Gtk.Declarative.EventSource
 import           GI.Gtk.Declarative.State
 import           Pipes
-import qualified Pipes.Prelude                 as Pipes
+import qualified Pipes.Prelude                         as Pipes
 import           Pipes.Concurrent
 import           System.Exit
 import           System.IO
@@ -73,8 +73,8 @@ data GtkMainExitedException =
 
 instance Exception GtkMainExitedException
 
-context :: Context.Context
-context = Context.empty
+context :: ComponentContext
+context = error "This value should never be used!"
 
 -- | Initialize GTK and run the application in it. This is a
 -- convenience function that is highly recommended. If you need more

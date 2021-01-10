@@ -31,7 +31,7 @@ import           Data.Typeable
 import           Data.Vector                                 (Vector)
 import qualified Data.Vector                                 as Vector
 
-import           GI.Gtk.Declarative.Context
+import           GI.Gtk.Declarative.Component.Internal       (ComponentContext)
 import           GI.Gtk.Declarative.EventSource.Subscription
 
 -- | The declarative form of a custom attribute. The actual type of of the
@@ -94,24 +94,24 @@ class (Typeable decl, Typeable (AttrState decl)) => CustomAttribute widget decl 
   data AttrState decl
 
   -- | Called when this attribute is first attached to a widget in the tree
-  attrCreate :: Context -> widget -> decl event -> IO (AttrState decl)
+  attrCreate :: ComponentContext -> widget -> decl event -> IO (AttrState decl)
 
   -- | Called when the widget tree is being patched.
-  attrPatch :: Context -> widget -> AttrState decl -> decl event1 -> decl event2 -> IO (AttrState decl)
+  attrPatch :: ComponentContext -> widget -> AttrState decl -> decl event1 -> decl event2 -> IO (AttrState decl)
 
   -- | Called when the associated widget is removed from the widget tree.
-  attrDestroy :: Context -> widget -> AttrState decl -> decl event -> IO ()
+  attrDestroy :: ComponentContext -> widget -> AttrState decl -> decl event -> IO ()
   attrDestroy _ctx _widget _state _decl =
     pure ()
 
   -- | Attach event handlers to this attribute.
-  attrSubscribe :: Context -> widget -> AttrState decl -> decl event -> (event -> IO ()) -> IO Subscription
+  attrSubscribe :: ComponentContext -> widget -> AttrState decl -> decl event -> (event -> IO ()) -> IO Subscription
   attrSubscribe _ctx _widget _state _decl _cb =
     mempty
 
 -- | Runs the create action for each custom attribute.
 createCustomAttributes
-  :: Context
+  :: ComponentContext
   -> widget
   -> Vector (CustomAttributeDecl widget event)
   -> IO (CollectedCustomAttributeStates widget)
@@ -123,7 +123,7 @@ createCustomAttributes ctx widget attrs =
 -- | Patches custom attribute state so it matches the latest declarative attributes.
 patchCustomAttributes
   :: forall widget e1 e2
-   . Context
+   . ComponentContext
   -> widget
   -> CollectedCustomAttributeStates widget
   -> Vector (CustomAttributeDecl widget e1)
@@ -180,7 +180,7 @@ patchCustomAttributes ctx widget oldStates oldDecls newDecls = do
 
 -- | Runs the destroy action for the given custom attributes.
 destroyCustomAttributes
-  :: Context
+  :: ContexComponentContextt
   -> widget
   -> CollectedCustomAttributeStates widget
   -> Vector (CustomAttributeDecl widget event)
@@ -192,7 +192,7 @@ destroyCustomAttributes ctx widget states decls =
 
 -- | Attaches event listeners to already-created custom attributes.
 subscribeCustomAttributes
-  :: Context
+  :: ComponentContext
   -> widget
   -> CollectedCustomAttributeStates widget
   -> Vector (CustomAttributeDecl widget event)
