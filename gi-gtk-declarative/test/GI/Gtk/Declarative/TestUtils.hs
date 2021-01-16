@@ -5,6 +5,7 @@ import           Control.Monad.IO.Class
 import qualified GI.GLib.Constants             as GLib
 import qualified GI.Gdk                        as Gdk
 import           GI.Gtk.Declarative
+import           GI.Gtk.Declarative.Component
 import           GI.Gtk.Declarative.State
 
 runUI :: MonadIO m => IO b -> m b
@@ -16,8 +17,13 @@ runUI ma = do
   liftIO (takeMVar ret)
 
 patch'
-  :: Patchable widget => SomeState -> widget e1 -> widget e2 -> IO SomeState
-patch' state markup1 markup2 = case patch state markup1 markup2 of
+  :: Patchable widget
+  => ComponentContext
+  -> SomeState
+  -> widget e1
+  -> widget e2
+  -> IO SomeState
+patch' ctx state markup1 markup2 = case patch ctx state markup1 markup2 of
   Keep      -> pure state
   Modify  f -> f
   Replace f -> f

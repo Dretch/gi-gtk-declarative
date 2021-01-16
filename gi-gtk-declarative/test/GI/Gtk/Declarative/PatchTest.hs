@@ -17,6 +17,7 @@ import qualified Data.Text                     as Text
 import           Data.Text                      ( Text )
 import qualified GI.Gtk                        as Gtk
 import           GI.Gtk.Declarative
+import           GI.Gtk.Declarative.Component
 import           GI.Gtk.Declarative.TestWidget
 import           GI.Gtk.Declarative.State
 import           GI.Gtk.Declarative.TestUtils
@@ -43,18 +44,21 @@ assertRight :: MonadTest m => Either Text a -> m a
 assertRight (Left  err) = annotate (Text.unpack err) >> failure
 assertRight (Right a  ) = pure a
 
-patchAll :: SomeState -> Widget event -> [Widget event] -> IO SomeState
-patchAll s1 w ws =
-  fst <$> foldM (\(s, w1) w2 -> (, w2) <$> patch' s w1 w2) (s1, w) ws
+patchAll :: ComponentContext -> SomeState -> Widget event -> [Widget event] -> IO SomeState
+patchAll ctx s1 w ws =
+  fst <$> foldM (\(s, w1) w2 -> (, w2) <$> patch' ctx s w1 w2) (s1, w) ws
+
+context :: ComponentContext
+context = error "value should not be used"
 
 patchAllInNewWindow
   :: MonadIO m => TestWidget -> [TestWidget] -> m (Either Text TestWidget)
 patchAllInNewWindow first rest =
   runUI . bracket (Gtk.new Gtk.Window []) #destroy $ \window -> do
-    firstState <- create (toTestWidget first)
+    firstState <- create context (toTestWidget first)
     #add window =<< someStateWidget firstState
     Gtk.widgetShowAll window
-    lastState <- patchAll firstState
+    lastState <- patchAll context firstState
                           (toTestWidget first)
                           (map toTestWidget rest)
     fromGtkWidget =<< someStateWidget lastState

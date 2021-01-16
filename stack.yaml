@@ -1,12 +1,11 @@
-resolver: lts-16.11
+resolver: nightly-2021-01-05
 
 packages:
 - gi-gtk-declarative
 - gi-gtk-declarative-app-simple
 - examples
 
-extra-deps:
-  - hedgehog-1.0
+extra-deps: []
 
 nix:
   packages: [pkgconfig, gnome3.gobjectIntrospection, gnome3.gtk]

@@ -57,18 +57,18 @@ library
                       , GI.Gtk.Declarative.Widget
                       , GI.Gtk.Declarative.Widget.Conversions
   build-depends:        async
-                      , base                   >=4.10 && <5
+                      , base                   >= 4.10 && < 5
                       , bytestring
-                      , containers             >= 0.6 && < 0.7
-                      , data-default-class     >= 0.1  && <0.2
-                      , gi-gdk                 >= 3    && <4
-                      , gi-gdkpixbuf           >= 2    && <3
-                      , gi-gobject             >= 2    && <3
-                      , gi-glib                >= 2    && <3
-                      , gi-gtk                 >= 3    && <4
-                      , haskell-gi             >= 0.21 && <0.24
-                      , haskell-gi-base        >= 0.21 && <0.24
-                      , haskell-gi-overloading == 1.0
+                      , containers             >= 0.6  && < 0.7
+                      , data-default-class     >= 0.1  && < 0.2
+                      , gi-gdk                 >= 3    && < 4
+                      , gi-gdkpixbuf           >= 2    && < 3
+                      , gi-gobject             >= 2    && < 3
+                      , gi-glib                >= 2    && < 3
+                      , gi-gtk                 >= 3    && < 4
+                      , haskell-gi             >= 0.24 && < 0.25
+                      , haskell-gi-base        >= 0.24 && < 0.25
+                      , haskell-gi-overloading >= 1.0  && < 1.1
                       , hashable
                       , mtl
                       , text
@@ -89,7 +89,7 @@ test-suite gi-gtk-declarative-tests
                    , gi-glib
                    , gi-gdk
                    , gi-gobject
-                   , gi-gtk
+                   , gi-gtk < 4
                    , gi-gtk-declarative
                    , haskell-gi-base
                    , hedgehog >= 1 && < 2

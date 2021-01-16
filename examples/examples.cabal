@@ -38,7 +38,7 @@ executable example
                       , file-embed
                       , gi-gobject
                       , gi-glib
-                      , gi-gtk
+                      , gi-gtk < 4
                       , gi-gtk-declarative
                       , gi-gtk-declarative-app-simple
                       , gi-gdk
