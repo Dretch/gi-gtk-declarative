@@ -94,4 +94,4 @@ instance Component ExampleApp where
         ]
 
 main :: IO ()
-main = run ExampleApp
+main = run (ExampleApp id)

@@ -148,25 +148,22 @@ data LoopState c = LoopState
   , rootSubscription :: Subscription
   }
 
--- | Show the component and process events from it until it emits `AppAction.Exit x`
--- The IO action returns `x`
-run
- :: Component c
- => (forall event. (AppAction x-> event) -> c event)
- -> IO x
+-- | Show the component and process its internal events until it
+-- sends `AppAction.Exit x` to its parent. The IO action returns `x`
+run :: Component c => c (AppAction x) -> IO x
 run = runWith (pure ())
 
--- | Show the component and process events from it until it emits `AppAction.Exit`
+-- | Show the component and process its internal events until it
+-- sends `AppAction.Exit x` to its parent. The IO action returns `x`
 runWith
  :: Component c
  => IO () -- ^ Additional initialisation action to run after GTK `init` but before GTK `main`.
- -> (forall event. (AppAction x -> event) -> c event)
+ -> c (AppAction x)
  -> IO x
-runWith postInitGtk rootCtor = do
+runWith postInitGtk rootComponent = do
   assertRuntimeSupportsBoundThreads
   
-  let rootComponent = rootCtor id
-      (initState, initAction) = createComponent rootComponent
+  let (initState, initAction) = createComponent rootComponent
   rootComponentState <- newIORef initState
   events <- newChan
   for_ initAction $
