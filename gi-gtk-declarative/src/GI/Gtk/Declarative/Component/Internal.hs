@@ -109,14 +109,14 @@ updateParent :: event -> UpdateM c event ()
 updateParent = UpdateParent
 
 -- | The result of running an `UpdateM`
-data UpdateResult a
+data UpdateResult x a
   = UpdateResultValue
       { updateValue :: a
       , updatedState :: Bool
       }
-  | UpdateResultExited
+  | UpdateResultExited x
 
-updateResult :: UpdateResult ()
+updateResult :: UpdateResult x ()
 updateResult = UpdateResultValue
   { updateValue = ()
   , updatedState = False

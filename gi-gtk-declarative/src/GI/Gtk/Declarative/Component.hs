@@ -139,7 +139,8 @@ component = Widget . ComponentWidget
 
 -- | A top-level component sends this event to its parent when it wants to
 -- affect the top-level GTK environment itself.
-data AppAction = Exit -- ^ Destroy all components, quit GTK, and cause `run` to finish.
+data AppAction x =
+  Exit x -- ^ Destroy all components, quit GTK, and cause `run` to finish and produce `x`.
 
 data LoopState c = LoopState
   { rootView :: Widget (ComponentAction c)
@@ -147,17 +148,20 @@ data LoopState c = LoopState
   , rootSubscription :: Subscription
   }
 
--- | Show the component and process events from it until it emits `AppAction.Exit`
+-- | Show the component and process events from it until it emits `AppAction.Exit x`
+-- The IO action returns `x`
 run
- :: Component c => (forall event. (AppAction -> event) -> c event)
- -> IO ()
+ :: Component c
+ => (forall event. (AppAction x-> event) -> c event)
+ -> IO x
 run = runWith (pure ())
 
 -- | Show the component and process events from it until it emits `AppAction.Exit`
 runWith
- :: IO () -- ^ Additional initialisation action to run after GTK `init` but before GTK `main`.
- -> Component c => (forall event. (AppAction -> event) -> c event)
- -> IO ()
+ :: Component c
+ => IO () -- ^ Additional initialisation action to run after GTK `init` but before GTK `main`.
+ -> (forall event. (AppAction x -> event) -> c event)
+ -> IO x
 runWith postInitGtk rootCtor = do
   assertRuntimeSupportsBoundThreads
   
@@ -177,13 +181,13 @@ runWith postInitGtk rootCtor = do
     `finally` (Gtk.mainQuit >> Async.wait main)
 
 runLoop
- :: forall c. Component c
- => c AppAction
+ :: forall x c. Component c
+ => c (AppAction x)
  -> IORef (ComponentState c)
  -> Chan DynamicAction
  -> IORef (HashMap ComponentId StoredComponent)
  -> IORef ComponentId
- -> IO ()
+ -> IO x
 runLoop rootComponent rootComponentState events components nextComponentId = do
 
   rootView <- view rootComponent <$> readIORef rootComponentState
@@ -195,11 +199,11 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
   loop LoopState{..}
   where
 
-    loop :: LoopState c -> IO ()
+    loop :: LoopState c -> IO x
     loop ls = do
       event <- readChan events
       processAction event >>= \case
-        UpdateResultExited                      -> pure ()
+        UpdateResultExited x                    -> pure x
         UpdateResultValue{updatedState = True}  -> rerender ls >>= loop
         UpdateResultValue{updatedState = False} -> loop ls
     
@@ -241,7 +245,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
       let cb = writeChan events . DynamicAction rootComponentId
       subscribe ctx rootView rootSomeState cb
 
-    processAction :: DynamicAction -> IO (UpdateResult ())
+    processAction :: DynamicAction -> IO (UpdateResult x ())
     processAction (DynamicAction cid (action :: ComponentAction d)) = do
       if cid == rootComponentId then
         case eqT @d @c of
@@ -262,7 +266,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
               Just Refl ->
                 runNonRootUpdateM pid cid comp view' (update comp action)
 
-    runRootUpdateM :: UpdateM c AppAction a -> IO (UpdateResult a)
+    runRootUpdateM :: UpdateM c (AppAction x) a -> IO (UpdateResult x a)
     runRootUpdateM = \case
       UpdatePure a ->
         pure updateResult{updateValue = a}
@@ -276,8 +280,8 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
         pure updateResult{ updatedState = True }
       UpdateIO cmd -> do
         runUpdateIO cmd rootComponentId
-      UpdateParent Exit -> do
-        pure UpdateResultExited
+      UpdateParent (Exit x) -> do
+        pure $ UpdateResultExited x
 
     runNonRootUpdateM
      :: forall comp parentComp a. (Component comp, Component parentComp)
@@ -286,7 +290,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
      -> comp (ComponentAction parentComp)
      -> Widget (ComponentAction comp)
      -> UpdateM comp (ComponentAction parentComp) a
-     -> IO (UpdateResult a)
+     -> IO (UpdateResult x a)
     runNonRootUpdateM pid cid comp' view' = \case
       UpdatePure a ->
         pure updateResult{updateValue = a}
@@ -308,16 +312,16 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
     runUpdateBind
      :: UpdateM comp e a
      -> (a -> UpdateM comp e b)
-     -> (forall x. UpdateM comp e x -> IO (UpdateResult x))
-     -> IO (UpdateResult b)
+     -> (forall d. UpdateM comp e d -> IO (UpdateResult x d))
+     -> IO (UpdateResult x b)
     runUpdateBind cmd f runner =
         runner cmd >>= \case
-          UpdateResultExited ->
-            pure UpdateResultExited
+          UpdateResultExited x ->
+            pure $ UpdateResultExited x
           UpdateResultValue{updateValue, updatedState} -> do
               runner (f updateValue) >>= \case
-                UpdateResultExited ->
-                  pure UpdateResultExited
+                UpdateResultExited x ->
+                  pure $ UpdateResultExited x
                 UpdateResultValue{updateValue = updateValue', updatedState = updatedState'} ->
                   pure $ UpdateResultValue updateValue' (updatedState || updatedState')
 
@@ -325,7 +329,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
      :: Component comp
      => IO (Maybe (ComponentAction comp))
      -> ComponentId
-     -> IO (UpdateResult ())
+     -> IO (UpdateResult x ())
     runUpdateIO cmd cid = do
         void . Async.async $ do
           cmd >>= \case
@@ -341,7 +345,7 @@ componentContext
  -> IO ComponentContext
 componentContext events currentComponentId nextComponents nextComponentId = do
   components <- readIORef nextComponents
-  pure $ ComponentContext{..}
+  pure ComponentContext{..}
 
 storeNewComponent
  :: (Component comp, Component parentComp)

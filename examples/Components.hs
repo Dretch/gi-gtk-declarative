@@ -54,7 +54,7 @@ instance Component IncButton where
       , on #clicked Reset
       ]
 
-data ExampleApp event = ExampleApp (AppAction -> event)
+data ExampleApp event = ExampleApp (AppAction () -> event)
 
 instance Component ExampleApp where
 
@@ -66,12 +66,12 @@ instance Component ExampleApp where
 
   update (ExampleApp cb) = \case
     CloseWindow ->
-      updateParent (cb Exit)
+      updateParent (cb $ Exit ())
     ReceiveInc i -> do
       updateIO_ $ putStrLn ("a child told us that i = " <> show i)
       when (i == 10) $ do
         updateIO_ $ putStrLn "i == 10, that's enough!"
-        updateParent (cb Exit)
+        updateParent (cb $ Exit ())
 
   view _decl _state =
     bin

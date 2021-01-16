@@ -97,3 +97,7 @@ Unfinished, badly designed, undocumented, full of bugs. Really just for informat
 **Q. Why build this as a fork instead of a module (like gi-gtk-declarative-app-simple)?**
 
 A. I tried, but could not find a way to pass the component "context" around when creating/patching components.
+
+**Q. How does a running component decide to exit the application?**
+
+A. The root component sends an `Exit x` event to its' parent (via `updateParent`), and this causes the runtime to stop running the GTK event loop and return the `x` value to the program that started the component in the first place.
