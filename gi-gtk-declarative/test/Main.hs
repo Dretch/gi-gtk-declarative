@@ -2,11 +2,12 @@ module Main where
 
 import           Control.Concurrent
 import           Control.Monad
-import qualified GI.Gtk                        as Gtk
+import qualified GI.Gtk                            as Gtk
 import           System.Exit
 import           System.IO
 
-import qualified GI.Gtk.Declarative.PatchTest  as PatchTest
+import qualified GI.Gtk.Declarative.ComponentTest  as ComponentTest
+import qualified GI.Gtk.Declarative.PatchTest      as PatchTest
 
 
 main :: IO ()
@@ -20,6 +21,8 @@ main = do
   Gtk.main
   allPassed <- takeMVar pass
   unless allPassed $ do
-    hPutStrLn stderr "Tests failed."
+    hPutStrLn stderr "Patch Tests failed."
     exitFailure
+  ComponentTest.main
+  
 
