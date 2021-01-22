@@ -1,3 +1,5 @@
+[![CI](https://github.com/Dretch/gi-gtk-declarative/workflows/CI/badge.svg)](https://github.com/Dretch/gi-gtk-declarative/actions)
+
 # GI GTK Declarative + components + custom attributes
 
 This is a half-finished fork of the wonderful [gi-gtk-declarative](https://github.com/owickstrom/gi-gtk-declarative) that adds _components_ and _custom attributes_.
