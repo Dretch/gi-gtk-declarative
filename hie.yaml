@@ -3,5 +3,4 @@ cradle:
     arguments:
       - -igi-gtk-declarative/src
       - -igi-gtk-declarative-app-simple/src
-      - -igi-gtk-declarative-components/src
       - -iexamples
