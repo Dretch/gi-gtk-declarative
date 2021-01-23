@@ -76,7 +76,7 @@ component (IncButton ParentComponentCallback)
 
 ### Bigger Example
 
-This is an application built with components: https://github.com/Dretch/foundationdb-explorer/tree/components
+This is an application built with components: https://github.com/Dretch/foundationdb-explorer/
 
 ## Custom Attributes
 
