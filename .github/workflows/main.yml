@@ -12,9 +12,9 @@ jobs:
         with:
           name: dretch
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-      - name: 'Build Libraries'
-        run: nix-build
+      - name: 'Build and Test Libraries'
+        run: nix-build -j2 --arg doCheck true
       - name: 'Build Docs'
-        run: nix-shell --run 'cd docs && mkdocs build'
+        run: nix-shell -j2 --run 'cd docs && mkdocs build'
 
 
