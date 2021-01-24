@@ -16,5 +16,3 @@ jobs:
         run: nix-build -j2 --arg doCheck true
       - name: 'Build Docs'
         run: nix-shell -j2 --run 'cd docs && mkdocs build'
-
-
