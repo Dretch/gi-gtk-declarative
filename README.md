@@ -103,3 +103,7 @@ A. I tried, but could not find a way to pass the component "context" around when
 **Q. How does a running component decide to exit the application?**
 
 A. The root component sends an `Exit x` event to its' parent (via `updateParent`), and this causes the runtime to stop running the GTK event loop and return the `x` value to the program that started the component in the first place.
+
+**Q. Where can I find API Docs?**
+
+A. [API Docs](https://dretch.github.io/gi-gtk-declarative/docs/haddock/)
