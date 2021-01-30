@@ -15,4 +15,21 @@ jobs:
       - name: 'Build and Test Libraries and Examples'
         run: nix-build -j2 --arg doCheck true
       - name: 'Build Docs'
-        run: nix-shell -j2 --run 'cd docs && mkdocs build'
+        run: nix-shell -j2 --run 'cabal haddock all && cd docs && mkdocs build'
+      - name: 'Publish Docs'
+        if: github.ref == 'refs/heads/components'
+        run: |
+          git clone https://github.com/Dretch/dretch.github.io.git
+          cd dretch.github.io
+          git config user.name gi-gtk-declarative-ci
+          git config user.email 'Dretch@users.noreply.github.com'
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Dretch/dretch.github.io.git
+          rm -rf gi-gtk-declarative/docs
+          mkdir -p gi-gtk-declarative/docs
+          cp -r ../docs/site gi-gtk-declarative/docs/guide
+          cp -r ../dist-newstyle/build/x86_64-linux/ghc-*/gi-gtk-declarative-0.*/doc/html/gi-gtk-declarative gi-gtk-declarative/docs/haddock
+          git add --all
+          git commit -m 'Publish latest gi-gtk-declarative docs'
+          git push origin
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
