@@ -3,14 +3,15 @@
 {-# LANGUAGE OverloadedLabels  #-}
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TypeFamilies      #-}
 
 module Components where
 
-import           Control.Concurrent             (threadDelay)
-import           Control.Monad                  (when)
-import           Control.Monad.State.Class      (MonadState(get, put), modify)
-import           Data.Text                      (pack)
+import           Control.Concurrent             ( threadDelay )
+import           Control.Monad                  ( when )
+import           Control.Monad.State.Class      ( get, modify, put )
+import           Data.Text                      ( pack )
 
 import           GI.Gtk                         ( Box(..)
                                                 , Button(..)
@@ -22,7 +23,7 @@ import           GI.Gtk.Declarative
 import           GI.Gtk.Declarative.Widget      ()
 import           GI.Gtk.Declarative.Component
 
-data IncButton event = IncButton (Int -> event)
+data IncButton event = IncButton { incEvent :: Int -> event }
 
 instance Component IncButton where
 
@@ -30,11 +31,13 @@ instance Component IncButton where
 
   data ComponentAction IncButton = Inc | Reset
 
-  createComponent _decl = (IncButtonState 0, Just Inc)
+  createComponent IncButton{} =
+    (IncButtonState 0, Just Inc)
 
-  patchComponent state _decl = state
+  patchComponent state IncButton{} =
+    state
 
-  update (IncButton cb) = \case
+  update IncButton{..} = \case
     Reset -> do
       put $ IncButtonState 0
       notifyParent
@@ -46,34 +49,35 @@ instance Component IncButton where
       notifyParent = do
         IncButtonState i <- get
         updateIO_ $ putStrLn ("about to tell parent that i = " <> show i)
-        updateParent $ cb i
+        updateParent $ incEvent i
 
-  view (IncButton _cb) (IncButtonState i) =
+  view IncButton{} (IncButtonState i) =
     widget Button
       [ #label := pack ("Reset (i = " <> show i <> ") to 0")
       , on #clicked Reset
       ]
 
-data ExampleApp event = ExampleApp (AppAction () -> event)
+data App event = App { exitEvent :: event }
 
-instance Component ExampleApp where
+instance Component App where
 
-  data ComponentState ExampleApp = ExampleAppState
+  data ComponentState App = AppState
 
-  data ComponentAction ExampleApp = ReceiveInc Int | CloseWindow
+  data ComponentAction App = ReceiveInc Int | CloseWindow
 
-  createComponent _decl = (ExampleAppState, Nothing)
+  createComponent App{} =
+    (AppState, Nothing)
 
-  update (ExampleApp cb) = \case
+  update App{..} = \case
     CloseWindow ->
-      updateParent (cb $ Exit ())
+      updateParent exitEvent
     ReceiveInc i -> do
       updateIO_ $ putStrLn ("a child told us that i = " <> show i)
       when (i == 10) $ do
         updateIO_ $ putStrLn "i == 10, that's enough!"
-        updateParent (cb $ Exit ())
+        updateParent exitEvent
 
-  view _decl _state =
+  view App{} AppState =
     bin
       Window
       [ #title := "Components"
@@ -94,4 +98,4 @@ instance Component ExampleApp where
         ]
 
 main :: IO ()
-main = run (ExampleApp id)
+main = run App{ exitEvent = Exit () }
