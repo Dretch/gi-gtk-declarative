@@ -12,6 +12,7 @@
 {-# LANGUAGE TypeApplications              #-}
 {-# LANGUAGE TypeFamilies                  #-}
 
+-- | Declarative, composable, components with independent internal state and events.
 module GI.Gtk.Declarative.Component
   ( Component(..)
   , ComponentContext
@@ -27,17 +28,17 @@ module GI.Gtk.Declarative.Component
 where
 
 import           Control.Concurrent
-import           Control.Exception             (SomeException, catch, finally)
-import qualified Control.Concurrent.Async      as Async
-import           Control.Monad                 (unless, void)
-import           Data.Foldable                 (for_)
-import           Data.HashMap.Strict           (HashMap)
-import qualified Data.HashMap.Strict           as HashMap
-import           Data.IORef                    (IORef, atomicModifyIORef, modifyIORef, newIORef, readIORef, writeIORef)
+import           Control.Exception                     (SomeException, catch, finally)
+import qualified Control.Concurrent.Async              as Async
+import           Control.Monad                         (unless, void)
+import           Data.Foldable                         (for_)
+import           Data.HashMap.Strict                   (HashMap)
+import qualified Data.HashMap.Strict                   as HashMap
+import           Data.IORef                            (IORef, atomicModifyIORef, modifyIORef, newIORef, readIORef, writeIORef)
 import           Data.Typeable
-import qualified GI.Gtk                        as Gtk
-import qualified GI.Gdk                        as Gdk
-import qualified GI.GLib.Constants             as GLib
+import qualified GI.Gtk                                as Gtk
+import qualified GI.Gdk                                as Gdk
+import qualified GI.GLib.Constants                     as GLib
 import           System.Exit
 import           System.IO
 
@@ -50,21 +51,21 @@ import           GI.Gtk.Declarative.Widget
 rootComponentId :: ComponentId
 rootComponentId = ComponentId 0
 
-data ComponentWidget comp event where
+data ComponentWidget c event where
   ComponentWidget
-   :: (Component comp, Component parentComp)
-   => comp (ComponentAction parentComp)
-   -> ComponentWidget comp (ComponentAction parentComp)
+   :: (Component c, Component parent)
+   => c (ComponentAction parent)
+   -> ComponentWidget c (ComponentAction parent)
 
-instance EventSource (ComponentWidget comp) where
+instance EventSource (ComponentWidget c) where
   subscribe ctx (ComponentWidget _comp) state _cb = do
     let (cid, state') = unwrapState state
-        (_state, compView) = getStoredComponent @comp ctx cid
+        (_state, compView) = getStoredComponent @c ctx cid
         chan = events ctx
         cb' = writeChan chan . DynamicAction cid
     subscribe ctx compView state' cb'
 
-instance Patchable (ComponentWidget comp) where
+instance Patchable (ComponentWidget c) where
 
   create ctx (ComponentWidget c) = do
     let (state, action) = createComponent c
@@ -90,7 +91,7 @@ instance Patchable (ComponentWidget comp) where
         setStoredComponent ctx' cid c2 newState newView
         pure ss
   
-  destroy ctx ss (ComponentWidget (_ :: c e)) = do
+  destroy ctx ss (ComponentWidget _) = do
     let (cid, ss') = unwrapState ss
         (_state, view') = getStoredComponent @c ctx cid
         ctx' = ctx{ currentComponentId = cid }
@@ -131,10 +132,12 @@ modifyCustomState f = \case
     modifyNode StateTreeNode{..} =
       StateTreeNode {stateTreeCustomState = f stateTreeCustomState, ..}
 
+-- | Turn a declarative component into a widget so it can be used as part
+-- of a widget tree.
 component
-  :: (Component comp, Component parentComp)
-  => comp (ComponentAction parentComp)
-  -> Widget (ComponentAction parentComp)
+  :: (Component c, Component parent)
+  => c (ComponentAction parent)
+  -> Widget (ComponentAction parent)
 component = Widget . ComponentWidget
 
 -- | A top-level component sends this event to its parent when it wants to
@@ -148,16 +151,25 @@ data LoopState c = LoopState
   , rootSubscription :: Subscription
   }
 
--- | Show the component and process its internal events until it
--- sends `AppAction.Exit x` to its parent. The IO action returns `x`
+-- | Start the GTK event loop, then show the component and process its
+-- internal events until it emits an `Exit x` event. Then stop GTK and
+-- return `x` to the caller.
+--
+-- The root component should return a GTK Window widget from its
+-- `view` method, otherwise nothing will be visible to the user.
 run :: Component c => c (AppAction x) -> IO x
 run = runWith (pure ())
 
--- | Show the component and process its internal events until it
--- sends `AppAction.Exit x` to its parent. The IO action returns `x`
+-- | Start the GTK event loop, then show the component and process its
+-- internal events until it emits an `Exit x` event. Then stop GTK and
+-- return `x` to the caller.
+--
+-- The root component should return a GTK Window widget from its
+-- `view` method, otherwise nothing will be visible to the user.
 runWith
  :: Component c
- => IO () -- ^ Additional initialisation action to run after GTK `init` but before GTK `main`.
+ => IO () -- ^ Additional initialisation action to run after GTK `init`
+          -- but before GTK `main`. E.g. to setup stylesheets.
  -> c (AppAction x)
  -> IO x
 runWith postInitGtk rootComponent = do
@@ -281,12 +293,12 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
         pure $ UpdateResultExited x
 
     runNonRootUpdateM
-     :: forall comp parentComp a. (Component comp, Component parentComp)
+     :: (Component c', Component parent')
      => ComponentId
      -> ComponentId
-     -> comp (ComponentAction parentComp)
-     -> Widget (ComponentAction comp)
-     -> UpdateM comp (ComponentAction parentComp) a
+     -> c' (ComponentAction parent')
+     -> Widget (ComponentAction c')
+     -> UpdateM c' (ComponentAction parent') a
      -> IO (UpdateResult x a)
     runNonRootUpdateM pid cid comp' view' = \case
       UpdatePure a ->
@@ -307,24 +319,24 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
         processAction $ DynamicAction pid action'
 
     runUpdateBind
-     :: UpdateM comp e a
-     -> (a -> UpdateM comp e b)
-     -> (forall d. UpdateM comp e d -> IO (UpdateResult x d))
+     :: UpdateM c' e a
+     -> (a -> UpdateM c' e b)
+     -> (forall d. UpdateM c' e d -> IO (UpdateResult x d))
      -> IO (UpdateResult x b)
     runUpdateBind cmd f runner =
         runner cmd >>= \case
           UpdateResultExited x ->
             pure $ UpdateResultExited x
           UpdateResultValue{updateValue, updatedState} -> do
-              runner (f updateValue) >>= \case
-                UpdateResultExited x ->
-                  pure $ UpdateResultExited x
-                UpdateResultValue{updateValue = updateValue', updatedState = updatedState'} ->
-                  pure $ UpdateResultValue updateValue' (updatedState || updatedState')
+            runner (f updateValue) >>= \case
+              UpdateResultExited x ->
+                pure $ UpdateResultExited x
+              UpdateResultValue{updateValue = updateValue', updatedState = updatedState'} ->
+                pure $ UpdateResultValue updateValue' (updatedState || updatedState')
 
     runUpdateIO
-     :: Component comp
-     => IO (Maybe (ComponentAction comp))
+     :: Component c'
+     => IO (Maybe (ComponentAction c'))
      -> ComponentId
      -> IO (UpdateResult x ())
     runUpdateIO cmd cid = do
@@ -345,12 +357,12 @@ componentContext events currentComponentId nextComponents nextComponentId = do
   pure ComponentContext{..}
 
 storeNewComponent
- :: (Component comp, Component parentComp)
+ :: (Component c, Component parent)
  => ComponentContext
- -> comp (ComponentAction parentComp)
- -> ComponentState comp
- -> Widget (ComponentAction comp)
- -> Maybe (ComponentAction comp)
+ -> c (ComponentAction parent)
+ -> ComponentState c
+ -> Widget (ComponentAction c)
+ -> Maybe (ComponentAction c)
  -> IO (ComponentId, ComponentContext)
 storeNewComponent ctx comp state view' action = do
   cid <- atomicModifyIORef (nextComponentId ctx) (\i -> (succ i, i))
@@ -362,45 +374,45 @@ storeNewComponent ctx comp state view' action = do
   pure (cid, ctx{currentComponentId = cid})
 
 getStoredComponent
- :: forall comp. Component comp
+ :: forall c. Component c
  => ComponentContext
  -> ComponentId
- -> (ComponentState comp, Widget (ComponentAction comp))
+ -> (ComponentState c, Widget (ComponentAction c))
 getStoredComponent ctx cid =
   getStoredComponent' cid (components ctx)
 
 getStoredComponent'
- :: forall comp. Component comp
+ :: forall c. Component c
  => ComponentId
  -> HashMap ComponentId StoredComponent
- -> (ComponentState comp, Widget (ComponentAction comp))
+ -> (ComponentState c, Widget (ComponentAction c))
 getStoredComponent' cid map' =
   case HashMap.lookup cid map' of
     Just (StoredComponent _pid _comp (state :: state) view') ->
-      case eqT @state @(ComponentState comp) of
+      case eqT @state @(ComponentState c) of
         Just Refl -> (state, view')
         Nothing   -> error "Bad non-root component state type: this is a bug"
     Nothing ->
       error "Missing component state: this is a bug"
 
 setStoredComponent
- :: (Component comp, Component parentComp)
+ :: (Component c, Component parent)
  => ComponentContext
  -> ComponentId
- -> comp (ComponentAction parentComp)
- -> ComponentState comp
- -> Widget (ComponentAction comp)
+ -> c (ComponentAction parent)
+ -> ComponentState c
+ -> Widget (ComponentAction c)
  -> IO ()
 setStoredComponent ctx cid comp state view' = do
   setStoredComponent' (nextComponents ctx) cid comp state view'
 
 setStoredComponent'
- :: (Component comp, Component parentComp)
+ :: (Component c, Component parent)
  => IORef (HashMap ComponentId StoredComponent)
  -> ComponentId
- -> comp (ComponentAction parentComp)
- -> ComponentState comp
- -> Widget (ComponentAction comp)
+ -> c (ComponentAction parent)
+ -> ComponentState c
+ -> Widget (ComponentAction c)
  -> IO ()
 setStoredComponent' components cid comp state view' = do
   modifyIORef components $ HashMap.adjust setState cid

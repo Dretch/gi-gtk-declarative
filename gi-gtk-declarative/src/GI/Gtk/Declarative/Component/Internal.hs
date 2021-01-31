@@ -30,8 +30,9 @@ import           Data.Typeable
 
 import           GI.Gtk.Declarative.Widget
 
--- | A declarative component. Types in this class must have a single type
--- parameter which describes the type of the events emitted by the component.
+-- | A declarative component that can be used as a widget via the `component`
+-- function. Types in this class are parameterized by the type of the events
+-- that the component emits externally (i.e. the type that its parent receives).
 class Typeable c => Component (c :: * -> *) where
 
   -- | The internal state of the component. This is initialized when the
@@ -39,38 +40,39 @@ class Typeable c => Component (c :: * -> *) where
   -- component as `patchComponent` and `update` modify it.
   data ComponentState c
   
-  -- | Internal actions that are emitted by child widgets and make this
-  -- component do stuff.
+  -- | Internal actions that are emitted by child widgets from the `view`
+  -- method and are fed into the `update` method.
   data ComponentAction c
 
   -- | Called when the component is first shown. This creates the initial
   -- component state from the declarative component, and optionally
-  -- provides an initial action to start the component doing stuff.
+  -- provides an initial action.
   createComponent :: c event -> (ComponentState c, Maybe (ComponentAction c))
 
   -- | Called when a new declarative component is applied to the existing
   -- component state. This method should copy any required state from the
-  -- new declarative component. This method will never be called for top
-  -- level components - so there is a default implementation that returns
-  -- an error: components intended to be used a non-top-level components
+  -- new declarative component.
+  --
+  -- This method will never be called for root components (since the root
+  -- declarative component never changes) so there is a default implementation
+  -- that returns an error: components intended to be used as non-root components
   -- should implement this method.
   patchComponent :: ComponentState c -> c event -> ComponentState c
   patchComponent _ _ =
     error "patchComponent not implemented: it should be implemented for all non-top-level components."
 
-  -- | Called when an action is emitted by a child event. The `UpdateM`
+  -- | Called when an event is emitted by a child widget. The `UpdateM`
   -- monad allows updating the component state, running asynchronous IO
-  -- actions, and sending events to the parent on this component.
+  -- actions, and sending events to the parent component.
   update :: c event -> ComponentAction c -> UpdateM c event ()
 
   -- | Provides the tree of widgets that display this component. Called
   -- whenever the state changes (and possibly other times too).
   view :: c event -> ComponentState c -> Widget (ComponentAction c)
 
--- | An "update action" that happens when a component of type `c` receives an
--- action from a child widget. The `event` type parameter describes the type of
--- events that the parent widget can receive. This implements `MonadState` to
--- allow getting/setting the component state.
+-- | An "update action" that is provided by `update` when a component of type
+-- `c` receives an action from a child widget. The `event` type parameter
+-- describes the type of events that the parent widget can receive.
 data UpdateM c event a where
   UpdatePure :: a -> UpdateM c event a
   UpdateBind :: UpdateM c event a -> (a -> UpdateM c event b) -> UpdateM c event b
@@ -86,9 +88,12 @@ instance Applicative (UpdateM c event) where
   pure = UpdatePure
   (<*>) = ap
 
+-- | Sequences update actions. A sequence of actions will continue to be evaluated
+-- until the root component emits an `Exit` event.
 instance Monad (UpdateM c event) where
   (>>=) = UpdateBind
 
+-- | Get/Set the internal state of the component. Setting the state triggers a re-render.
 instance MonadState (ComponentState c) (UpdateM c event) where
   get = UpdateStateGet
   put = UpdateStatePut
@@ -144,5 +149,5 @@ data ComponentContext = ComponentContext
   }
 
 -- | A dynamically typed action that is destined for a particular component.
-data DynamicAction = forall comp. Component comp =>
-  DynamicAction ComponentId (ComponentAction comp)
+data DynamicAction = forall c. Component c =>
+  DynamicAction ComponentId (ComponentAction c)
