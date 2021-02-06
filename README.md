@@ -12,66 +12,140 @@ This fork adds something more akin to React's components. Each component has it'
 
 Components are supposed to enable abstraction and code-reuse.
 
-### Quick Example
-
-#### Defining a component
+### Complete Example
 
 ``` haskell
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedLabels  #-}
+{-# LANGUAGE OverloadedLists   #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TypeFamilies      #-}
 
--- The declarative version of the component. The argument is a kind-of
--- callback: it converts an event into the parent components event
--- type so that we can send a message to the parent
-data IncButton event = IncButton (Int -> event)
+module Components where
 
+import           Control.Concurrent             ( threadDelay )
+import           Control.Monad                  ( when )
+import           Control.Monad.State.Class      ( get, modify, put )
+import           Data.Text                      ( pack )
+
+import           GI.Gtk                         ( Box(..)
+                                                , Button(..)
+                                                , Label(..)
+                                                , Orientation(..)
+                                                , Window(..)
+                                                , WindowPosition(..) )
+import           GI.Gtk.Declarative
+import           GI.Gtk.Declarative.Widget      ()
+import           GI.Gtk.Declarative.Component
+
+-- The declarative version of this component. `event` is the type of events that
+-- get emitted externally - i.e. sent to the parent component.
+data IncButton event = IncButton
+  { incEvent :: Int -> event -- ^ constructs an event to let the parent know that
+                             --   the count has been incremented.
+  }
+
+-- A declarative component must implement the `Component` class.
 instance Component IncButton where
 
-  -- The internal state of the component
+  -- The internal state of the component.
   data ComponentState IncButton = IncButtonState Int
 
   -- The internal events that are fired by this components internal widget tree.
   data ComponentAction IncButton = Inc | Reset
 
-  -- creates the initial component state, and fires an initial event
-  createComponent (IncButton _) = (IncButtonState 0, Just Inc)
+  -- Creates the initial component state, and fires an initial event.
+  createComponent IncButton{} =
+    (IncButtonState 0, Just Inc)
 
-  -- called when the declarative component is updated so that the internal state can be updated
-  patchComponent state (IncButton _) = state
+  -- Called when the declarative component is updated so that the internal state
+  -- can be updated.
+  patchComponent state IncButton{} =
+    state
 
-  -- handles internal events
-  update (IncButton cb) = \case
+  -- Handles internal events.
+  update IncButton{..} = \case
     Reset -> do
-      put $ IncButtonState 0 -- set internal state
+      -- Set internal state.
+      put $ IncButtonState 0
       notifyParent
     Inc -> do
+      -- Modify internal state.
       modify $ \(IncButtonState i) -> IncButtonState (i + 1)
       notifyParent
-      updateIO $ Just Inc <$ threadDelay 1000000 -- do some IO, and fire an event when it finishes
+      -- Run some IO that sleeps and then emits another action,
+      -- causing an infinite loop of events (until the component
+      -- is removed from the widget tree).
+      updateIO $ Just Inc <$ threadDelay 1000000
     where
       notifyParent = do
+        -- Get the internal state.
         IncButtonState i <- get
+        -- Do some IO (without firing an event when it finishes):
         updateIO_ $ putStrLn ("about to tell parent that i = " <> show i)
-        updateParent $ cb i -- send a message to the parent component
+        -- Send a message to the parent component:
+        updateParent $ incEvent i
 
-  -- create the declarative widget tree for this component
-  view (IncButton _cb) (IncButtonState i) =
+  -- Creates the declarative widget tree for this component.
+  view IncButton{} (IncButtonState i) =
     widget Button
       [ #label := pack ("Reset (i = " <> show i <> ") to 0")
       , on #clicked Reset
       ]
-```
 
-#### Using a component
+-- The root component.
+data App event = App
+  { exitEvent :: event -- ^ This event lets the runtime know to quit the app.
+  }
 
-Components can be used anywhere a regular widget can be used.
+instance Component App where
 
-``` haskell
+  data ComponentState App = AppState
 
--- define an event for when the child component invokes its callback
-data ComponentAction SomeParentComponent =
-  ParentComponentCallback Int
+  data ComponentAction App = ReceiveInc Int | CloseWindow
 
--- turn the declarative component into a Widget (ComponentAction SomeParentComponent)
-component (IncButton ParentComponentCallback)
+  createComponent App{} =
+    (AppState, Nothing)
+
+  update App{..} = \case
+    CloseWindow ->
+      updateParent exitEvent
+    ReceiveInc i -> do
+      updateIO_ $ putStrLn ("a child told us that i = " <> show i)
+      when (i == 10) $ do
+        updateIO_ $ putStrLn "i == 10, that's enough!"
+        updateParent exitEvent
+
+  view App{} AppState =
+    bin
+      Window
+      [ #title := "Components"
+      , on #deleteEvent (const (True, CloseWindow))
+      , #heightRequest := 100
+      , #windowPosition := WindowPositionCenter
+      ] $
+      container Box
+        [ #orientation := OrientationVertical
+        , #margin := 4
+        ]
+        [ BoxChild
+            defaultBoxChildProperties
+            (widget Label [ #label := "The app will finish when i = 10" ])
+        , BoxChild
+            defaultBoxChildProperties
+            -- Components can be used anywhere a regular widget can be used
+            -- they just need to be turned into a `Widget e` via the `component`
+            -- method. We pass `ReceiveInc` so that `IncButton` knows how to
+            -- construct an event that `App` understands.
+            (component (IncButton ReceiveInc))
+        ]
+
+-- This will start the GTK event loop, render the component widget tree, and keep
+-- running component `update` methods when events occur, until the `Exit` event
+-- is emitted by `App`.
+main :: IO ()
+main = run App{ exitEvent = Exit () }
 ```
 
 ### Bigger Example
@@ -107,3 +181,7 @@ A. The root component sends an `Exit x` event to its' parent (via `updateParent`
 **Q. Where can I find API Docs?**
 
 A. [API Docs](https://dretch.github.io/gi-gtk-declarative/docs/haddock/)
+
+**Q. What happens if the view created by the top-level event is not a Window widget?**
+
+A. Wierd stuff happens, unfortunately. In future the type system might enforce that root components always creates a window.
