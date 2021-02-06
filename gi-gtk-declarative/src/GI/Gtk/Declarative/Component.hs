@@ -435,9 +435,9 @@ assertRuntimeSupportsBoundThreads :: IO ()
 assertRuntimeSupportsBoundThreads = unless rtsSupportsBoundThreads $ do
   hPutStrLn
     stderr
-    "GI.Gtk.Declarative.App.Simple requires the program to \
-                     \be linked using the threaded runtime of GHC (-threaded \
-                     \flag)."
+    "GI.Gtk.Declarative.Component requires the program to \
+    \be linked using the threaded runtime of GHC (-threaded \
+    \flag)."
   exitFailure
 
 runUI :: IO a -> IO a
