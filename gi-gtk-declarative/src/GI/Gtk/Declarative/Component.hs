@@ -235,7 +235,7 @@ runLoop rootComponent rootComponentState events components nextComponentId = do
           dCtx <- componentContext events rootComponentId components nextComponentId
           destroy dCtx (rootSomeState ls) (rootView ls)
           newRootSomeState <- createNew
-          runUI (Gtk.widgetShowAll =<< someStateWidget newRootSomeState)
+          Gtk.widgetShowAll =<< someStateWidget newRootSomeState
           newRootSubscription <- rootSubscribe newRootView newRootSomeState
           pure LoopState
             { rootView = newRootView
