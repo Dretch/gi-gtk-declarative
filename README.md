@@ -172,7 +172,9 @@ Unfinished, badly designed, undocumented, full of bugs. Really just for informat
 
 **Q. Why build this as a fork instead of a module (like gi-gtk-declarative-app-simple)?**
 
-A. I tried, but could not find a way to pass the component "context" around when creating/patching components.
+A 1. Custom attributes are, I think, impossible to implement as a module, because it needs changes throughout the core of the codebase.
+
+A 2. It seems _almost_ possible to provide the component system as a module, but there is one blocker that so far I cannot solve. The `Functor` constraint on widgets means that events can't be `Typeable`, which is required in order to implement the dynamic typing involved in sending events to their parent components.
 
 **Q. How does a running component decide to exit the application?**
 
